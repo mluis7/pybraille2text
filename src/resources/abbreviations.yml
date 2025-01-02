@@ -1,0 +1,16 @@
+
+name: abbraviations
+grade: 2
+
+parse:
+    round_to: 2
+    offset: 1.15
+cv2_cfg:
+    detect:
+        min_area: 12
+        max_area: 200
+        min_inertia_ratio: 0.70
+        min_circularity: 0.70
+        min_convexity: 0.65
+        show_detect: true
+        

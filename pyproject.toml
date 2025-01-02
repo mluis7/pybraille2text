@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pybraille"
+dynamic = ["version"]
+
+dependencies = [
+  "opencv-python",
+  "numpy",
+  "pyyaml"
+]
+requires-python = ">=3.9"
+authors = [
+  {name = "Luis Muñoz", email = "south.minds@gmail.com"}
+]
+
+description = "Translate images with braille to text."
+readme = "README.md"
+license = {text = "GPL-3.0"}
+keywords = ["opencv", "braille"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python"
+]
+
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "."
+]
+
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
