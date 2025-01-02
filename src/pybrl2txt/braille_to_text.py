@@ -20,7 +20,7 @@ def get_build_detector_params(cv2_params):
     max_area = cv2_params['cv2_cfg']['detect']['max_area']
     min_inertia_ratio = cv2_params['cv2_cfg']['detect']['min_inertia_ratio']
     min_circularity = cv2_params['cv2_cfg']['detect'].get('min_circularity', 0.9)
-    min_convexity = cv2_params['cv2_cfg']['detect'].get('min_circularity', 0.75)
+    min_convexity = cv2_params['cv2_cfg']['detect'].get('min_convexity', 0.75)
     # Set up SimpleBlobDetector
     params = cv2.SimpleBlobDetector_Params()
 # Filter by area (size of the blob)
@@ -97,6 +97,9 @@ def group_by_lines(kp_map, blob_coords, xydiff, page_params):
         lines_coord.append(blob_coords[p0:p1])
         print(f"Line: {j + 1}; points: {len(detected_lines[j])}, last: {blob_coords[p0:p1].max()}")
     
+    for i,d in enumerate(detected_lines):
+        if len(d) != len(lines_coord[i]):
+            print("ERROR on group by")
     return detected_lines, lines_coord
 
 def get_area_parameters(coords, area_obj: Area):
@@ -161,12 +164,15 @@ def coordinate_to_braille_indexes(cell, line_params, idx):
     
     """
     is_cell_error = False
-    cell_start = get_cell_start(line_params, idx)
+    cell_start = get_cell_start(line_params, idx) - line_params.xmin
     #print(f"idx: {idx}, cell_start: {cell_start:.0f}, len: {len(cell)}")
     y_all_line = [round(line_params.ymin), round(line_params.ymin + line_params.cell_params.ydot * 1.20), round(line_params.ymin + line_params.cell_params.ydot * 2.3)]
+    y_all_line = [0 , round(line_params.cell_params.ydot * 1.20), round(line_params.cell_params.ydot * 2.3)]
     #y_all_line = [round(line_params.ymin), round(line_params.ymin + line_params.cell_params.ydot * 1.20), round(line_params.ymax + line_params.cell_params.ydot * 0.5)]
     cell_idxs = []
     cell_idx = -1
+    cell[:,0] -= line_params.xmin
+    cell[:,1] -= line_params.ymin
     # FIXME: detect x in first column. Cells with single dot may fail to detect 1 or 3 dot
     if idx == 0 and line_params.ymax > 800:
         pass
@@ -184,14 +190,14 @@ def coordinate_to_braille_indexes(cell, line_params, idx):
                 cell_idx = 4
             elif cc[1] <= y_all_line[1] and cc[1] < y_all_line[2]:
                 cell_idx = 5
-            elif cc[1] > y_all_line[1] + 1 and cc[1] <= y_all_line[2]:
+            elif cc[1] > y_all_line[1] and cc[1] <= y_all_line[2]:
                 cell_idx = 6
         if cell_idx == -1:
             is_cell_error = True
-            #print(f"WARNING. cell_idx not found: {cell_idx}, {cc}", "x_boundary:", cell_middle, "y_all_line", y_all_line, file=sys.stderr)
+            print(f"WARNING. cell_idx not found: {cell_idx}, {cc}", "x_boundary:", cell_middle, "y_all_line", y_all_line, file=sys.stderr)
         elif cell_idx in cell_idxs:
             is_cell_error = True
-            #print(f"WARNING. cell_idx duplicate: {cell_idx}, {cc}", "x_boundary:", cell_middle, "y_all_line", y_all_line, file=sys.stderr)
+            print(f"WARNING. cell_idx duplicate: {cell_idx}, {cc}", "x_boundary:", cell_middle, "y_all_line", y_all_line, file=sys.stderr)
         # if len(cell) == 0 and cell_idx == 3:
         #     print("ERROR. First cell_idx can't be 3")
         cell_idxs.append(cell_idx)
@@ -205,6 +211,8 @@ def translate_cell(cell, line_params, idx):
         #print(f"SPACE: {idx}, {BLANK}")
         return BLANK
     brl_idx, is_cell_error = coordinate_to_braille_indexes(cell, line_params, idx)
+    if is_cell_error:
+        print(f"index translation error {cell} -> {brl_idx}", file=sys.stderr)
 #    for mm in [abbr, cell_map, numbers]:
 #        if brl_idx in mm:
 #            print(f"Cell: {idx}, {brl_idx}, {mm[brl_idx]}")
@@ -239,7 +247,7 @@ def get_cell_start(line_params, idx):
 def translate_line(line_coor, ln, page):
     """Return array of cells in a line with BLANK inserted."""
     
-    line_params, line_diff = get_area_parameters(line_coor, Line())
+    line_params = get_area_parameters(line_coor, Line())[0]
     if line_params.xmax < page.xmax:
             line_params.xmax = page.xmax
     if line_params.cell_params.csize > page.cell_params.csize:
@@ -250,18 +258,21 @@ def translate_line(line_coor, ln, page):
     
     idx = 0
     cell_start = get_cell_start(line_params, idx)
+    if idx == 0 and cell_start > page.xmin:
+        line_params.xmin = page.xmin
+        cell_start = line_params.xmin
     
     cell_end = line_params.xmin + line_params.cell_params.csize #  line_params.cell_params.xdot + line_params.cell_params.xsep / 2
     line_end = 0
     
-    if ln == 2:
+    if ln == 16:
         pass
     
     while line_end <= line_params.xmax:
         #print("line, cell_start, cell_end", ln, cell_start, cell_end)
         # FIXME: cell_start, cell_end fail to find right cells
-        cell = line_coor[(line_coor[:, 0] >= cell_start) & (line_coor[:, 0] <= cell_end)]
-        if len(cell) == 0 or (len(cell) > 0 and cell[0][0] > cell_end):
+        cell = line_coor[(line_coor[:, 0] >= cell_start) & (line_coor[:, 0] < cell_end)]
+        if len(cell) == 0:# or (len(cell) > 0 and cell[0][0] > cell_end):
             cells.append(BLANK)
             line_end += line_params.cell_params.csize
         else:
@@ -278,10 +289,13 @@ def translate_line(line_coor, ln, page):
 
 def translate_word_text_by_indexes(word_tuples, line_num):
     line_text = ''
+    line_abbr = ''
+    line_other = ''
     total_errors = 0
     for w, wrd in enumerate(word_tuples):
         if wrd in abbr:
             line_text += f"{abbr[wrd]} "
+            line_abbr += f"{abbr[wrd]} "
         elif len(wrd) >=1:
             for char in wrd:
                 if char in prefixes:
@@ -291,7 +305,9 @@ def translate_word_text_by_indexes(word_tuples, line_num):
                     for schar_map in [numbers, cell_map]:
                         if char in schar_map:
                             line_text += cell_map[char]
+                            line_other += cell_map[char]
                             break
+            line_other += f" {wrd}\n"
             line_text += '_ '
         else:
             if wrd == ():
@@ -301,6 +317,8 @@ def translate_word_text_by_indexes(word_tuples, line_num):
                 line_text += "XXXXX "
             total_errors += 1
     
+    print(f" abbr found: {line_abbr}")
+    print(f"other found: {line_other}")
     return line_text, total_errors
 
 def main():
@@ -363,7 +381,7 @@ def main():
         word_tuples.append((ln, translate_cells(cells, line_params)))
     
     for ln_wrd_tpl in word_tuples:
-        print(f" ---------------> words in line {ln_wrd_tpl[0]}: {len(ln_wrd_tpl[1])}", file=sys.stderr)
+        print(f" ---------------> words in line {ln_wrd_tpl[0] + 1}: {len(ln_wrd_tpl[1])}", file=sys.stderr)
         total += len(ln_wrd_tpl[1])
         wrd_text, wrd_errors = translate_word_text_by_indexes(ln_wrd_tpl[1], ln_wrd_tpl[1])
         text += f" {wrd_text}"

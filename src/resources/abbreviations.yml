@@ -3,7 +3,7 @@ name: abbraviations
 grade: 2
 
 parse:
-    round_to: 2
+    round_to: 0
     offset: 1.15
 cv2_cfg:
     detect:
@@ -11,6 +11,6 @@ cv2_cfg:
         max_area: 200
         min_inertia_ratio: 0.70
         min_circularity: 0.70
-        min_convexity: 0.65
-        show_detect: true
+        min_convexity: 0.75
+        show_detect: false
         
