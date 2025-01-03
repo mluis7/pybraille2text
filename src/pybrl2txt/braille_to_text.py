@@ -11,6 +11,7 @@ import cv2
 import numpy as np
 from pybrl2txt.models import Page, Line, CellParams, Area
 from pybrl2txt.braille_maps import BLANK, abbr, cell_map, numbers, prefixes, rev_abbr
+from future.builtins.misc import isinstance
 
 #abbr = { tuple([t for t in v]) : k for k,v in rev_abbr.items()}
 #abbr = dict(map(reversed, rev_abbr.items()))
@@ -23,6 +24,8 @@ def get_build_detector_params(cv2_params):
     min_convexity = cv2_params['cv2_cfg']['detect'].get('min_convexity', 0.75)
     # Set up SimpleBlobDetector
     params = cv2.SimpleBlobDetector_Params()
+    
+    #params.blobColor = 0
 # Filter by area (size of the blob)
     params.filterByArea = True
     params.minArea = min_area # 10 Adjust based on dot size
@@ -38,7 +41,7 @@ def get_build_detector_params(cv2_params):
     #params.minDistBetweenBlobs = 12
     return params
 
-def show_detection(image, detected_lines, xcell, xsep, xmin, ymax):
+def show_detection(image, detected_lines, xcell, csize, xmin, ymax):
     """Help to visually debug if lines are correctly detected since dots would be colored by line.
     Black dots represent not correctly detected cells/lines.
     Color will repeat every for lines."""
@@ -49,9 +52,10 @@ def show_detection(image, detected_lines, xcell, xsep, xmin, ymax):
     # Draw detected blobs as red circles
     output_image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
     
-#    x = int(xmin)
-#    for i in range(1,7):
-#        output_image = cv2.line(image, ( x * i + int(xsep), 50), (x * i + int(xsep), ymax), (0, 255, 0), thickness=2)
+#    x = xmin
+#    for line in detected_lines:
+#        for i in range(1,len(line)):
+#            output_image = cv2.line(image, ( int(x + csize * i), 50), (int(x + csize * i),ymax), (0, 255, 0), thickness=1)
 
     for i, line in enumerate(detected_lines):
         output_image = cv2.drawKeypoints(output_image, line, np.array([]), colors[i], cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
@@ -75,7 +79,6 @@ def group_by_lines(kp_map, blob_coords, xydiff, page_params):
         if curr_pt[0] >= 714 and curr_pt[1] >= 820 and curr_pt[1] < 851:
             pass
     #print(d, curr_pt, blob_coords[i+1], f"xdiff {d}, ydiff: {blob_coords[i+1][1] - blob_coords[i][1]}")
-        # FIXME: line detect because a word may be split in 2 lines
         current_keypoint = kp_map[curr_pt[0], curr_pt[1]]
         #if (d[0] < page_params.cell_params.csize * -1 and d[1] >= ycell * 2):
         #727, 823
@@ -125,12 +128,12 @@ def get_area_parameters(coords, area_obj: Area):
     area_obj.ymin = ymin
     area_obj.ymax = ymax
     
-    xuniq = np.unique(np.round(xydiff[(xydiff[:,0] > 1)][:,0]))
+    xuniq_from_diff = np.unique(np.round(xydiff[(xydiff[:,0] > 1)][:,0]))
     # x separation between dots in a cell
-    xcell = xuniq.min()
+    xcell = xuniq_from_diff.min()
     # y separation between dots in a cell
-    yuniq = np.unique(np.round(xydiff[(xydiff[:,1] > 1)][:,1]))
-    ycell = yuniq.min()
+    yuniq_from_diff = np.unique(np.round(xydiff[(xydiff[:,1] > 1)][:,1]))
+    ycell = yuniq_from_diff.min()
     # x separation between cells
     xsep = np.unique(xydiff[(xydiff[:,0] > xcell + 1)][:,0]).min()
     
@@ -138,18 +141,27 @@ def get_area_parameters(coords, area_obj: Area):
     area_obj.cell_params.ydot = ycell
     area_obj.cell_params.xsep = xsep
     area_obj.cell_params.csize = round(xcell + xsep)
-
+    
+    if isinstance(area_obj, Line):
+        yuniq = np.unique(np.round(ycoords[(ycoords > 1)]))
+        area_obj.ydot14 = yuniq[0]
+        area_obj.ydot25 = yuniq[1]
+        area_obj.ydot36 = yuniq[2]
+    
+    print(f"xuniq_from_diff: {xuniq_from_diff}\nyuniq: {yuniq_from_diff}")
     return area_obj, xydiff
 
 def get_keypoints(img_path, cv2_params):
     image = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
     params = get_build_detector_params(cv2_params)
+#    maxArea = image.shape[0]*image.shape[1]*0.99
+#    params.maxArea = maxArea
 # Create a detector with the parameters
     detector = cv2.SimpleBlobDetector_create(params) # Detect blobs
     keypoints = detector.detect(image)
     return keypoints, image
 
-def coordinate_to_braille_indexes(cell, line_params, idx):
+def cell_keypoints_to_braille_indexes(cell, line_params, idx):
     """Return a sorted tuple representing dot indexes in the cell.
     The tuple should map to a text character in cell_map dict.
     Indexes are
@@ -158,48 +170,160 @@ def coordinate_to_braille_indexes(cell, line_params, idx):
     3 6
     
     Cell    Indexes       Text
-    .
-    .
-    . . --> (1,2,3,6) --> 'v'
+    * .
+    * .
+    * * --> (1,2,3,6) --> 'v'
     
+    If the cell has 2 different 'x' values then the whole cell may be determined.
+    cell= [[10, 10],[20, 40]]
+    
+    xcol123 = cell[:,0].min()
+    xcol456 = cell[:,0].max()
+    
+    # min and max could belong to dots in the first or second row.
+    ycol14_25 = cell[:,1].min()
+    ycol25_36 = cell[:,1].max()
+    * .  * *  . .  . .
+    . .  * *  * *  * .
+    . *  . .  * *  . *
+    
+    Cells with dots on the second column only need special care since 
+    another reference is required to determine which column the dots are in.
+    
+    (xcol123 == xcol456) = True 
+    * .  . .  . *  . .
+    * .  * .  . *  . *
+    . .  * .  . .  . *
+    
+    (ycol14_25 == ycol25_36) = True
+    single row
+    * *  . . . .
+    . .  * * . .
+    . .  . . * *
+    
+    (xcol123 == xcol456) and (ycol14_25 == ycol25_36) = True
+    Single dot
+    * .  . .  . .  . * . .  . .
+    . .  * .  . .  . . . *  . .
+    . .  . .  * .  . . . .  . *
     """
     is_cell_error = False
-    cell_start = get_cell_start(line_params, idx) - line_params.xmin
+    cause = 'UNKNOWN'
+    cell_start = get_cell_start(line_params, idx)# - line_params.xmin
     #print(f"idx: {idx}, cell_start: {cell_start:.0f}, len: {len(cell)}")
     y_all_line = [round(line_params.ymin), round(line_params.ymin + line_params.cell_params.ydot * 1.20), round(line_params.ymin + line_params.cell_params.ydot * 2.3)]
-    y_all_line = [0 , round(line_params.cell_params.ydot * 1.20), round(line_params.cell_params.ydot * 2.3)]
+    #y_all_line = [0 , round(line_params.cell_params.ydot * 1.20), round(line_params.cell_params.ydot * 2.3)]
     #y_all_line = [round(line_params.ymin), round(line_params.ymin + line_params.cell_params.ydot * 1.20), round(line_params.ymax + line_params.cell_params.ydot * 0.5)]
     cell_idxs = []
     cell_idx = -1
-    cell[:,0] -= line_params.xmin
-    cell[:,1] -= line_params.ymin
+    #cell[:,0] -= line_params.xmin
+    #cell[:,1] -= line_params.ymin
+    
+    ydot14 = line_params.ydot14
+    ydot25 = line_params.ydot25
+    ydot36 = line_params.ydot36
+    
+    xcol123 = cell[:,0].min()
+    xcol456 = cell[:,0].max()
+    ycol14_25 = cell[:,1].min()
+    ycol25_36 = cell[:,1].max()
+    
+    if len(cell) > 6:
+        print(f"ERROR. Cell has more than 6 dots", file=sys.stderr)
+        return [-1], True
+    elif len(cell) == 0:
+        print(f"ERROR. Cell is empty", file=sys.stderr)
+        return [-1], True
+    
     # FIXME: detect x in first column. Cells with single dot may fail to detect 1 or 3 dot
     if idx == 0 and line_params.ymax > 800:
         pass
+    elif line_params.line_num == 2 and idx == 4:
+        pass
     for cc in cell:
         cell_middle = round(cell_start + line_params.cell_params.xdot * 0.8)
-        if (cc[0] < cell_middle):
-                if cc[1] <= y_all_line[0]:
+        ymin = line_params.ymin
+        ydot = ymin
+        ydot1 = ydot + line_params.cell_params.ydot * 1.20
+        ydot2 = ydot1 + line_params.cell_params.ydot * 1.20
+        
+        if xcol123 == xcol456 and ycol14_25 == ycol25_36:
+            # Single dot cell
+            if cc[0] < cell_middle:
+                if cc[1] <= ydot14: #line_params.ymin:
                     cell_idx = 1
-                elif cc[1] <= y_all_line[1] and cc[1] < y_all_line[2]:
+                elif cc[1] > ydot and cc[1] <= ydot1:
                     cell_idx = 2
-                elif cc[1] > y_all_line[1] and cc[1] <= y_all_line[2]:
+                elif cc[1] >= ydot2:
                     cell_idx = 3
-        elif cc[0] > cell_middle:
-            if cc[1] <= y_all_line[0]:
-                cell_idx = 4
-            elif cc[1] <= y_all_line[1] and cc[1] < y_all_line[2]:
-                cell_idx = 5
-            elif cc[1] > y_all_line[1] and cc[1] <= y_all_line[2]:
-                cell_idx = 6
+            elif cc[0] > cell_middle:
+                if cc[1] <= ydot:
+                    cell_idx = 4
+                elif cc[1] > ydot and cc[1] <= ydot1:
+                    cell_idx = 5
+                elif cc[1] >= ydot2:
+                    cell_idx = 6
+        elif xcol123 != xcol456 and ycol14_25 == ycol25_36:
+            # 2 dots in a row
+            if cc[1] <= line_params.ymin:
+                if cc[0] < cell_middle:
+                    cell_idx = 1
+                elif cc[0] > cell_middle:
+                    cell_idx = 4
+            elif cc[1] > ydot and cc[1] <= ydot1:
+                if cc[0] < cell_middle:
+                    cell_idx = 2
+                elif cc[0] > cell_middle:
+                    cell_idx = 5
+            elif cc[1] > ydot1 and cc[1] <= ydot2:
+                if cc[0] < cell_middle:
+                    cell_idx = 3
+                elif cc[0] > cell_middle:
+                    cell_idx = 6
+        elif xcol123 == xcol456 and ycol14_25 != ycol25_36:
+            # 2 or 3 dots in a single row
+            if cc[0] < cell_middle:
+                if cc[1] <= ydot:
+                    cell_idx = 1
+                elif cc[1] > ydot and cc[1] <= ydot1:
+                    cell_idx = 2
+                elif cc[1] > ydot1 and cc[1] <= ydot2:
+                    cell_idx = 3
+            elif cc[0] > cell_middle:
+                if cc[1] <= ydot:
+                    cell_idx = 4
+                elif cc[1] > ydot and cc[1] <= ydot1:
+                    cell_idx = 5
+                elif cc[1] > ydot1 and cc[1] <= ydot2:
+                    cell_idx = 6
+        elif xcol123 != xcol456 and ycol14_25 != ycol25_36:
+            # 2 or more dots in a different row/column
+            if cc[0] < cell_middle:
+                if cc[1] <= ydot:
+                    cell_idx = 1
+                elif cc[1] > ydot and cc[1] <= ydot1:
+                    cell_idx = 2
+                elif cc[1] > ydot1 and cc[1] <= ydot2:
+                    cell_idx = 3
+            elif cc[0] > cell_middle:
+                if cc[1] <= ydot:
+                    cell_idx = 4
+                elif cc[1] > ydot and cc[1] <= ydot1:
+                    cell_idx = 5
+                elif cc[1] > ydot1 and cc[1] <= ydot2:
+                    cell_idx = 6
+        else:
+            cell_idx = -1
+
+        err_msg = f"line: {line_params.line_num}, cell_idx: {cell_idx}, xmiddle: {cell_middle} y_all_line: {y_all_line}, kp: {cc}"
         if cell_idx == -1:
+            cause = 'not found'
             is_cell_error = True
-            print(f"WARNING. cell_idx not found: {cell_idx}, {cc}", "x_boundary:", cell_middle, "y_all_line", y_all_line, file=sys.stderr)
+            print(f"WARN. cell_idx {cause}. {err_msg}", file=sys.stderr)
         elif cell_idx in cell_idxs:
+            cause = 'duplicate'
             is_cell_error = True
-            print(f"WARNING. cell_idx duplicate: {cell_idx}, {cc}", "x_boundary:", cell_middle, "y_all_line", y_all_line, file=sys.stderr)
-        # if len(cell) == 0 and cell_idx == 3:
-        #     print("ERROR. First cell_idx can't be 3")
+            print(f"WARN. cell_idx {cause}. {err_msg}", file=sys.stderr)
         cell_idxs.append(cell_idx)
         cell_idx = -1
     return tuple(sorted(cell_idxs)), is_cell_error
@@ -210,9 +334,9 @@ def translate_cell(cell, line_params, idx):
     if cell is BLANK:
         #print(f"SPACE: {idx}, {BLANK}")
         return BLANK
-    brl_idx, is_cell_error = coordinate_to_braille_indexes(cell, line_params, idx)
+    brl_idx, is_cell_error = cell_keypoints_to_braille_indexes(cell, line_params, idx)
     if is_cell_error:
-        print(f"index translation error {cell} -> {brl_idx}", file=sys.stderr)
+        print(f"index translation error\n{cell} -> {brl_idx}", file=sys.stderr)
 #    for mm in [abbr, cell_map, numbers]:
 #        if brl_idx in mm:
 #            print(f"Cell: {idx}, {brl_idx}, {mm[brl_idx]}")
@@ -230,7 +354,7 @@ def translate_cells(cells, line_params):
     
         if tcell is not BLANK:
             word_tpl.append(tcell)
-        else:
+        elif len(word_tpl) > 0:
             word_tuples.append(tuple(word_tpl))
             word_tpl = []
     return word_tuples
@@ -241,20 +365,33 @@ def get_cell_start(line_params, idx):
     if idx == 1:
         cell_start += line_params.cell_params.csize
     elif idx > 1:
-        cell_start += (line_params.cell_params.csize) * idx - line_params.cell_params.xdot * 0.3
+        cell_start += (line_params.cell_params.csize) * idx #- line_params.cell_params.xdot * 0.3
     return cell_start
 
 def translate_line(line_coor, ln, page):
-    """Return array of cells in a line with BLANK inserted."""
+    """Return array of cells in a line with BLANK inserted.
+    Area parameters are recalculated with specific line values.
+    """
     
     line_params = get_area_parameters(line_coor, Line())[0]
+    cp = line_params.cell_params
+    line_params.line_num = ln
+    
+    
+    # Line min x coordinate is less than page one so the line probably starts with dots in the second column (4,5,6)
+    if line_params.xmin > page.xmin:
+            line_params.xmin = page.xmin # -= line_params.cell_params.xdot
     if line_params.xmax < page.xmax:
             line_params.xmax = page.xmax
     if line_params.cell_params.csize > page.cell_params.csize:
         line_params.cell_params.csize = page.cell_params.csize
+        
+    print(f"x params: xcell {cp.xdot :.0f}, xmin {line_params.xmin:.0f}, xsep {cp.xsep:.0f}, csize {cp.csize:.0f}, xmax {line_params.xmax:.0f}")
+    print(f"y params: ycell {cp.ydot:.0f}, ymin {line_params.ymin:.0f}")
     
     cell_count_expected = int((line_params.xmax - line_params.xmin) / line_params.cell_params.csize)
     cells = []
+    blank_count = 0
     
     idx = 0
     cell_start = get_cell_start(line_params, idx)
@@ -265,18 +402,14 @@ def translate_line(line_coor, ln, page):
     cell_end = line_params.xmin + line_params.cell_params.csize #  line_params.cell_params.xdot + line_params.cell_params.xsep / 2
     line_end = 0
     
-    if ln == 16:
-        pass
-    
     while line_end <= line_params.xmax:
         #print("line, cell_start, cell_end", ln, cell_start, cell_end)
-        # FIXME: cell_start, cell_end fail to find right cells
         cell = line_coor[(line_coor[:, 0] >= cell_start) & (line_coor[:, 0] < cell_end)]
         if len(cell) == 0:# or (len(cell) > 0 and cell[0][0] > cell_end):
             cells.append(BLANK)
             line_end += line_params.cell_params.csize
+            blank_count += 1
         else:
-            #cell -= (line_params.xmin, line_params.ymin)
             cells.append(cell)
             line_end = cells[-1][0][0]
         idx += 1
@@ -284,41 +417,66 @@ def translate_line(line_coor, ln, page):
         cell_end += line_params.cell_params.csize
     
     #print(f"cell width: {line_params.cell_params.csize}, pt count: {len(line_coor)}, Cells found/expected: {len(cells)}/{cell_count_expected}")
-    return cells, line_params
+    return cells, line_params, blank_count
 
 
 def translate_word_text_by_indexes(word_tuples, line_num):
+    """Translate cell indexes to text using maps"""
+    
     line_text = ''
     line_abbr = ''
     line_other = ''
     total_errors = 0
+    prefix = None
     for w, wrd in enumerate(word_tuples):
-        if wrd in abbr:
-            line_text += f"{abbr[wrd]} "
-            line_abbr += f"{abbr[wrd]} "
-        elif len(wrd) >=1:
-            for char in wrd:
-                if char in prefixes:
-                    line_text += f"~{''.join([str(n) for n in char])}"
-                    continue
-                else:
-                    for schar_map in [numbers, cell_map]:
-                        if char in schar_map:
-                            line_text += cell_map[char]
-                            line_other += cell_map[char]
-                            break
-            line_other += f" {wrd}\n"
-            line_text += '_ '
+        print("wrd", wrd)
+        abbr_used = False
+        if len(wrd) == 1:
+            if wrd in abbr:
+                line_text += f"{abbr[wrd]} "
+                line_abbr += f"{abbr[wrd]} "
+            elif wrd[0] in cell_map:
+                line_text += f"{cell_map[wrd[0]]} "
+                line_other += f"{cell_map[wrd[0]]} "
+        elif len(wrd) > 1:
+            if wrd[0] in prefixes:
+                prefix = wrd[0]
+            if prefix is not None and prefix == (6,):
+                if wrd[1] in cell_map:
+                    line_text += cell_map[wrd[1]].upper()
+                for char in wrd[2:]:
+                    if (char,) in abbr and not abbr_used:
+                        line_text += abbr.get((char,))
+                        abbr_used = True
+                    else:
+                        line_text += cell_map.get(char, '¬')
+                line_text += ' '
+            elif wrd in abbr:
+                line_text += f"{abbr[wrd]} "
+                line_abbr += f"{abbr[wrd]} "
+            else:
+                for char in wrd:
+                    if char in prefixes:
+                        line_text += f"~{''.join([str(n) for n in char])}"
+                        continue
+                    else:
+                        for schar_map in [numbers, cell_map]:
+                            if char in schar_map:
+                                line_text += cell_map[char]
+                                line_other += cell_map[char]
+                                break
+                line_other += f" {wrd}\n"
+                line_text += '_ '
         else:
             if wrd == ():
                 continue
             else:
-                print(f"line {line_num+1} word {w + 1} not found: {wrd}", file=sys.stderr)
+                #print(f"line {line_num+1} word {w + 1} not found: {wrd}", file=sys.stderr)
                 line_text += "XXXXX "
             total_errors += 1
     
-    print(f" abbr found: {line_abbr}")
-    print(f"other found: {line_other}")
+    #print(f" abbr found: {line_abbr}")
+    #print(f"other found: {line_other}")
     return line_text, total_errors
 
 def main():
@@ -329,8 +487,11 @@ def main():
     #image_path = "technical.jpg"
     #image_path = "contracted_braille_example.webp"
     #image_path = "result2.brf.png"
+    #image_path = "result2.brf_ABC.png"
     #image_path = "abbreviations_brl_abc.png"
-    image_path = "abbreviations_brl_1line.png"
+    image_path = "abbreviations_brl_small.png"
+    #image_path = "abbreviations_brl_1line.png"
+    #image_path = "abbreviations_brl_1line_branah.png"
     
     grade = 2
     round_to = 2
@@ -365,7 +526,7 @@ def main():
     detected_lines, lines_coord = group_by_lines(kp_map, blob_coords, xydiff, page)
    
     if show_detect: 
-        show_detection(image, detected_lines, cp.xdot, cp.xsep, page.xmin, 400)
+        show_detection(image, detected_lines, cp.xdot, cp.csize, page.xmin, 400)
     
     text = ''
     total = 0
@@ -373,7 +534,7 @@ def main():
     word_tuples = []
     for ln, line_coor in enumerate(lines_coord):
         #print(line_coor)
-        cells, line_params = translate_line(line_coor, ln, page)
+        cells, line_params, blank_count = translate_line(line_coor, ln, page)
         cp = line_params.cell_params
         #print(f"x params: xdot {cp.xdot :.0f}, xsep {cp.xsep:.0f}, csize {cp.csize:.0f}, xmax {line_params.xmax:.0f}")
         #print(f"y params: ydot {cp.ydot:.0f}, ymin {line_params.ymin:.0f}")

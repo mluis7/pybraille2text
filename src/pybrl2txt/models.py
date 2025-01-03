@@ -30,6 +30,14 @@ class Page(Area):
 
 @dataclass
 class Line(Area):
+    # Get y possible values if parent object is a Line.
+    # A Line should have only 3 possible values.
+    # Name suffix represents cell braille indexes
+    ydot14 = 0
+    ydot25 = 0
+    ydot36 = 0
+    # Useful for debugging
+    line_num = -1
     # CellParams
     cell_params  = CellParams()
 

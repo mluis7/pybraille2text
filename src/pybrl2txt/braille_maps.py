@@ -21,12 +21,14 @@ numbers = {
     (1,2,4): '6', (1,2,4,5): '7', (1,2,5): '8', (2,4): '9', (2,4,5): '0',
     }
 
-prefixes = [(6,), (2,5,6),
+prefixes = [(6,), # Upper case prefix 
+            (2,5,6),
             #(4,5), # initial letter contraction
             #(4,5,6), # initial letter contraction
             # (5,6), # initial letter contraction
-            (3,4,5,6)]
+            (3,4,5,6)] # numeral prefix
 
+# extracted from https://www.brailleauthority.org/ueb/symbols_list.pdf
 rev_abbr = {'about': ((1,), (1, 2)), 'above': ((1,), (1, 2), (1, 2, 3, 6)), 'according': ((1,), (1, 4)),
         'across': ((1,), (1, 4), (1, 2, 3, 5)), 'after': ((1,), (1, 2, 4)), 
         'afternoon': ((1,), (1, 2, 4), (1, 3, 4, 5)), 'afterward': ((1,), (1, 2, 4), (2, 4, 5, 6)), 
@@ -96,20 +98,5 @@ rev_abbr = {'about': ((1,), (1, 2)), 'above': ((1,), (1, 2), (1, 2, 3, 6)), 'acc
 }
 
 abbr = { v:k for k,v in rev_abbr.items()}
-
-# print sorted tuples
-#keys = list(abbr.keys())
-#keys.sort()
-#for k in keys:
-#    print(f"{k}: {abbr[k]}")
-
-
-#print('\n'.join([f"{k}: '{v}'," for k,v in abbr1.items()]))
-#
-#print(sorted(rev_abbr.keys()))
-
-#for k,v in rev_abbr.items():
-#    print(k not in abbr1, k, v)
-
 
 
