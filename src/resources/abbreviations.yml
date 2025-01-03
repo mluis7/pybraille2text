@@ -7,10 +7,10 @@ parse:
     offset: 1.15
 cv2_cfg:
     detect:
-        min_area: 12
+        min_area: 14
         max_area: 200
-        min_inertia_ratio: 0.70
-        min_circularity: 0.70
+        min_inertia_ratio: 0.85
+        min_circularity: 0.80
         min_convexity: 0.75
-        show_detect: false
+        show_detect: true
         
