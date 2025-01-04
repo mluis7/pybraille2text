@@ -22,7 +22,7 @@ numbers = {
     }
 
 prefixes = [(6,), # Upper case prefix 
-            (2,5,6),
+            #(2,5,6),
             #(4,5), # initial letter contraction
             #(4,5,6), # initial letter contraction
             # (5,6), # initial letter contraction

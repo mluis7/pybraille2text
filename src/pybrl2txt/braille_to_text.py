@@ -12,6 +12,9 @@ import unicodedata as uc
 from pybrl2txt.models import Page, Line, Area
 from pybrl2txt.braille_maps import BLANK, abbr, cell_map, numbers, prefixes, rev_abbr
 from future.builtins.misc import isinstance
+import logging
+
+logger = logging.getLogger("pybrl2txt")
 
 #abbr = { tuple([t for t in v]) : k for k,v in rev_abbr.items()}
 #abbr = dict(map(reversed, rev_abbr.items()))
@@ -60,7 +63,7 @@ def show_detection(image, detected_lines, xcell, csize, xmin, ymax):
     for i, line in enumerate(detected_lines):
         output_image = cv2.drawKeypoints(output_image, line, np.array([]), colors[i], cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
-    print("Showing detection result")
+    logger.info("Showing detection result")
     cv2.imshow(f"Detected blobs.", output_image)
     if cv2.waitKey(0) & 0xFF == ord('q'):  
         cv2.destroyAllWindows() 
@@ -94,7 +97,7 @@ def group_by_lines(kp_map, blob_coords, xydiff, page_params):
     
     for i,d in enumerate(detected_lines):
         if len(d) != len(lines_coord[i]):
-            print("ERROR on group by")
+            logger.error("ERROR on group by")
     return detected_lines, lines_coord
 
 def get_area_parameters(coords, area_obj: Area):
@@ -142,7 +145,7 @@ def get_area_parameters(coords, area_obj: Area):
             area_obj.ydot25 = yuniq[1]
         if yuniq.size > 2:
             area_obj.ydot36 = yuniq[2]
-        print(f"{area_obj}")
+        logger.debug(f"{area_obj}")
     
     #print(f"xuniq_from_diff: {xuniq_from_diff}\nyuniq: {yuniq_from_diff}")
     return area_obj, xydiff
@@ -228,10 +231,10 @@ def cell_keypoints_to_braille_indexes(cell, line_params, idx):
         cell_middle = xucell[0] + round((xucell[1]-xucell[0])/2) 
     
     if len(cell) > 6:
-        print(f"ERROR. Cell has more than 6 dots", file=sys.stderr)
+        logger.error(f"ERROR. Cell has more than 6 dots")
         return [-1], True
     elif len(cell) == 0:
-        print(f"ERROR. Cell is empty", file=sys.stderr)
+        logger.error(f"ERROR. Cell is empty")
         return [-1], True
     
     for cc in cell:
@@ -307,11 +310,11 @@ def cell_keypoints_to_braille_indexes(cell, line_params, idx):
         if cell_idx == -1:
             cause = 'not found'
             is_cell_error = True
-            print(f"WARN. cell_idx {cause}. {err_msg}", file=sys.stderr)
+            logger.warning(f"WARN. cell_idx {cause}. {err_msg}")
         elif cell_idx in cell_idxs:
             cause = 'duplicate'
             is_cell_error = True
-            print(f"WARN. cell_idx {cause}. {err_msg}", file=sys.stderr)
+            logger.warning(f"WARN. cell_idx {cause}. {err_msg}")
         cell_idxs.append(cell_idx)
         cell_idx = -1
     return tuple(sorted(cell_idxs)), is_cell_error
@@ -326,7 +329,7 @@ def translate_cell(cell, line_params, idx):
     brl_idx, is_cell_error = cell_keypoints_to_braille_indexes(cell, line_params, idx)
     if is_cell_error:
         error_count += 1
-        print(f"index translation error\n{cell} -> {brl_idx}", file=sys.stderr)
+        logger.error(f"index translation error\n{cell} -> {brl_idx}")
     return brl_idx, error_count
 
 def translate_cells(cells, line_params):
@@ -344,7 +347,7 @@ def translate_cells(cells, line_params):
             word_tuples.append(tuple(word_tpl))
             word_tpl = []
     if total_trn_err > 0:
-        print(f"Line {line_params.line_num} cell translation errors: {total_trn_err}", file=sys.stderr)
+        logger.error(f"Line {line_params.line_num} cell translation errors: {total_trn_err}")
     return word_tuples
 
 
@@ -376,11 +379,11 @@ def translate_line(line_coor, ln, page):
     # Calculated cell size for the line is greater than page calculated cell size.
     # It's probably an indicator of page irregularities or bad blob detections
     if line_params.cell_params.csize > page.cell_params.csize:
-        print(f"WARN. Line cell size changed: page csize: {page.cell_params.csize}, line csize {line_params.cell_params.csize}", file=sys.stderr)
+        logger.warning(f"WARN. Line cell size changed: page csize: {page.cell_params.csize}, line csize {line_params.cell_params.csize}")
         line_params.cell_params.csize = page.cell_params.csize
         
-    print(f"x params: xcell {cp.xdot :.0f}, xmin {line_params.xmin:.0f}, xsep {cp.xsep:.0f}, csize {cp.csize:.0f}, xmax {line_params.xmax:.0f}")
-    print(f"y params: ycell {cp.ydot:.0f}, ymin {line_params.ymin:.0f}")
+    logger.debug(f"x params: xcell {cp.xdot :.0f}, xmin {line_params.xmin:.0f}, xsep {cp.xsep:.0f}, csize {cp.csize:.0f}, xmax {line_params.xmax:.0f}")
+    logger.debug(f"y params: ycell {cp.ydot:.0f}, ymin {line_params.ymin:.0f}")
     
     #cell_count_expected = int((line_params.xmax - line_params.xmin) / line_params.cell_params.csize)
     cells = []
@@ -409,12 +412,14 @@ def translate_line(line_coor, ln, page):
         cell_start = get_cell_start(line_params, idx)
         cell_end += line_params.cell_params.csize
     
-    print(f"cell width: {line_params.cell_params.csize}, pt count: {len(line_coor)}, Cells: {len(cells)}, Spaces: {blank_count}")
+    logger.debug(f"cell width: {line_params.cell_params.csize}, pt count: {len(line_coor)}, Cells: {len(cells)}, Spaces: {blank_count}")
     return cells, line_params, blank_count
 
 
 def translate_word_text_by_indexes(word_tuples, line_num):
-    """Translate cell indexes to text using maps"""
+    """Translate cell indexes to text using maps.
+    This is the toughest task since Braille reading rules must be applied. 
+    """
     
     line_text = []
     line_abbr = ''
@@ -423,7 +428,6 @@ def translate_word_text_by_indexes(word_tuples, line_num):
     prefix = None
     for w, wrd in enumerate(word_tuples):
         #print("wrd", wrd)
-        abbr_used = False
         wrd_txt = ''
         if len(wrd) == 1:
             if wrd in abbr:
@@ -433,36 +437,29 @@ def translate_word_text_by_indexes(word_tuples, line_num):
                 line_text.append(cell_map[wrd[0]])
                 line_other += f"{cell_map[wrd[0]]} "
         elif len(wrd) > 1:
-            if wrd[0] in prefixes:
-                prefix = wrd[0]
-            if prefix is not None and prefix == (6,):
-                if wrd[1] in cell_map:
-                    line_text.append(cell_map[wrd[1]].upper())
-                for char in wrd[2:]:
-                    if (char,) in abbr and not abbr_used:
-                        line_text.append(abbr.get((char,)))
-                        abbr_used = True
-                    else:
-                        line_text.append(cell_map.get(char, '¬'))
-                line_text += ' '
-            elif wrd in abbr:
+            if wrd in abbr:
                 line_text.append(abbr[wrd])
                 line_abbr += f"{abbr[wrd]} "
             else:
                 for char in wrd:
                     if char in prefixes:
-                        line_text.append(f"~{''.join([str(n) for n in char])}")
+                        prefix = char
                         continue
                     else:
-                        for schar_map in [numbers, cell_map]:
-                            if char in schar_map:
-                                wrd_txt += cell_map[char]
-                                line_other += cell_map[char]
-                                break
-                    line_text.append(wrd_txt)
+                        if prefix ==  (3, 4 ,5 ,6) and char in numbers:
+                            wrd_txt += numbers[char]
+                            line_other += numbers[char]
+                        elif char in cell_map:
+                            wrd_txt += cell_map[char]
+                            line_other += cell_map[char]
+                            if prefix ==  (3, 4 ,5 ,6):
+                                prefix = None
+                if prefix is not None and prefix == (6,):
+                    wrd_txt = wrd_txt[0].upper() + ''.join(wrd_txt[1:])
+                    prefix = None
+                line_text.append(wrd_txt)
                 wrd_txt = ''
                 line_other += f" {wrd}\n"
-                #line_text += '_ '
         else:
             if wrd == ():
                 continue
@@ -472,9 +469,12 @@ def translate_word_text_by_indexes(word_tuples, line_num):
     
     #print(f" abbr found: {line_abbr}")
     #print(f"other found: {line_other}")
+    logger.info(f"Line {line_num}: Tuples to words translations: {len(line_text)}")
     return line_text, total_errors
 
 def main():
+    logging.basicConfig(level=logging.INFO)
+    
     base_dir = '/home/lmc/projects/eclipse-workspace/SOPython/lmc/braille_to_text_poc'
     cfg_path = '../resources/abbreviations.yml'
     #image_path = "braille-poem2.png"
@@ -497,12 +497,15 @@ def main():
         show_detect = config['cv2_cfg']['detect']['show_detect']
     
     img_path = f"{base_dir}/{image_path}"
-    print(f"Starting braille to text translation of {image_path}")
+    logger.info(f"Starting braille to text translation of {image_path}")
     keypoints, image = get_keypoints(img_path, config)
     # map of keypoints coordinates to keypoints
     kp_map = { (round(kp.pt[0], round_to), round(kp.pt[1], round_to)): kp for kp in keypoints}
     
-    areas = set(round(kp.size) for kp in keypoints)
+    areas = np.unique(np.array([round(kp.size) for kp in keypoints]))
+    areas_diff = np.diff(areas)
+    if areas_diff.size > 0 and areas_diff.max() >= config['cv2_cfg']['detect']['min_area'] * 0.5:
+        logger.warning("Too many blob sizes detected. Cell detection will probably be poor or bad.")
     # all dots coordinates, sorted to help find lines.
     blob_coords = np.array(list(kp_map.keys()))
     #blob_coords = np.array([kp.pt for kp in keypoints])
@@ -512,10 +515,10 @@ def main():
     page, xydiff = get_area_parameters(blob_coords, Page())
     cp = page.cell_params
     
-    print(f"blob_coords: {len(blob_coords)}, xydiff: {len(xydiff)}")
-    print(f"x params: xcell {cp.xdot :.0f}, xmin {page.xmin:.0f}, xsep {cp.xsep:.0f}, csize {cp.csize:.0f}, xmax {page.xmax:.0f}")
-    print(f"y params: ycell {cp.ydot:.0f}, ymin {page.ymin:.0f}")
-    print(f"areas {areas}")
+    logger.info(f"blob_coords: {len(blob_coords)}, xydiff: {len(xydiff)}")
+    logger.info(f"x params: xcell {cp.xdot :.0f}, xmin {page.xmin:.0f}, xsep {cp.xsep:.0f}, csize {cp.csize:.0f}, xmax {page.xmax:.0f}")
+    logger.info(f"y params: ycell {cp.ydot:.0f}, ymin {page.ymin:.0f}")
+    logger.info(f"areas {areas}")
     # List of list of cells by line_params
     detected_lines, lines_coord = group_by_lines(kp_map, blob_coords, xydiff, page)
    
@@ -537,7 +540,7 @@ def main():
     
     for ln_wrd_tpl in word_tuples:
         total += len(ln_wrd_tpl[1])
-        wrd_text, wrd_errors = translate_word_text_by_indexes(ln_wrd_tpl[1], ln_wrd_tpl[1])
+        wrd_text, wrd_errors = translate_word_text_by_indexes(ln_wrd_tpl[1], ln_wrd_tpl[0])
         text += ' '.join(wrd_text)
         lines_words.append(wrd_text)
         total_errors += wrd_errors
@@ -557,26 +560,27 @@ def main():
                 found_text.append(wr)
                 found_count += 1
             else:
-                not_found_text += f"'{wr}' "
+                not_found_text += f"{wr}"
                 not_found_count += 1                
         found_text += '\n'
-        #not_found_text += '\n'
+        not_found_text += ' '
             
-    for ra in rev_abbr:
-        if ra not in found_text:
-            missing.append(ra)
-    
-    print(f"Total words: {total} (spaces: {total_blank}), total_errors: {total_errors}")
-    print(f"total processed words: {not_found_count + found_count}")
-    print(f"total found words: {found_count}\nNot found words: {not_found_count}\n")
+    logger.info(f"Total words: {total} (spaces: {total_blank}), total_errors: {total_errors}")
+    logger.info(f"total processed words: {not_found_count + found_count}")
+    logger.info(f"total found words: {found_count}\nNot found words: {not_found_count}\n")
     print(f'Translated abbreviations {"-" * 80}')
     print(' '.join(found_text))
     print(f'Incorrect translations {"-" * 80}')
-    print(not_found_text)
-    print(f'Missing abbreviations{"-" * 80}')
-    print('\n'.join(missing))
-#    print(f'All text {"-" * 80}')
-#    print(text)
+    print(''.join(not_found_text))
+    
+#    for ra in rev_abbr:
+#        if ra not in found_text:
+#            missing.append(ra)
+#    print(f'Missing abbreviations{"-" * 80}')
+#    print('\n'.join(missing))
+
+    print(f'All text {"-" * 80}')
+    print(text)
 if __name__ == '__main__':
     main()
     
