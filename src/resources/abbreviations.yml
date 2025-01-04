@@ -12,5 +12,5 @@ cv2_cfg:
         min_inertia_ratio: 0.85
         min_circularity: 0.80
         min_convexity: 0.75
-        show_detect: true
+        show_detect: false
         
