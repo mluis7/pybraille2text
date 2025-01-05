@@ -1,8 +1,17 @@
 
-__all__ = ['BLANK', 'cell_map', 'numbers', 'prefixes', 'abbr']
+__all__ = ['BLANK', 'cell_map', 'numbers', 'prefixes', 'abbr', 'symbols', 'BLANK', 'ACUTE' \
+           'NUMBER', 'UPPER']
 BLANK = (0,0,0,0,0,0)
+
+ACUTE = 'ACUTE' #  ((4, 5), (3, 4))((1,),) -> á
 UPPER = 'UPPER'
 NUMBER = 'NUMBER'
+#(4,5), # initial letter contraction
+ILC45 = (4, 5)
+#(4,5,6), # initial letter contraction
+ILC456 = (4, 5, 6)
+# (5,6), # initial letter contraction
+ILC56 = (5, 6)
 
 cell_map = {
     (1,): 'a', (1,2): 'b', (1,4): 'c', (1,4,5): 'd', (1,5): 'e',
@@ -25,11 +34,9 @@ numbers = {
 
 prefixes = { UPPER: (6,), # Upper case prefix 
             #(2,5,6),
-            #(4,5), # initial letter contraction
-            #(4,5,6), # initial letter contraction
-            # (5,6), # initial letter contraction
-            NUMBER: (3,4,5,6)
-            } # numeral prefix
+            NUMBER: (3,4,5,6), # numeral prefix
+            ACUTE: ((4, 5), (3, 4)),
+            } 
 
 # extracted from https://www.brailleauthority.org/ueb/symbols_list.pdf
 rev_abbr = {'about': ((1,), (1, 2)), 'above': ((1,), (1, 2), (1, 2, 3, 6)), 'according': ((1,), (1, 4)),
@@ -105,6 +112,25 @@ rev_abbr = {'about': ((1,), (1, 2)), 'above': ((1,), (1, 2), (1, 2, 3, 6)), 'acc
         'world': ((3, 4, 5),(2, 4, 5, 6),), 'would': ((2, 4, 5, 6), (1, 4, 5)), 'you': ((1, 3, 4, 5, 6),), 
         'young': ((5,), (1, 3, 4, 5, 6)), 'your': ((1, 3, 4, 5, 6), (1, 2, 3, 5)), 'yourself': ((1, 3, 4, 5, 6), (1, 2, 3, 5), (1, 2, 4)), 
         'yourselves': ((1, 3, 4, 5, 6), (1, 2, 3, 5), (1, 2, 3, 6), (2, 3, 4))
+}
+
+symbols = {
+    ':': ((2, 5),),
+    '&': ((4,), (1, 2, 3, 4, 6)), '<': ((4,), (1, 2, 6)), '>': ((4,), (3, 4, 5)), '_c': (), 
+    "'": ((3,)), '"*': ((5,), (3, 5)), '_m': (), '"': (), '#': (),
+    '@': ((4,), (1,)), '\\': ((4, 5, 6), (1, 6)), '{': ((4, 5, 6), (1, 2, 6)), '}': ((4, 5, 6), (3, 4, 5)),
+    '(': ((5,), (1, 2, 6)), ')': ((5,), (3, 4, 5)), '[': ((4, 6), (1, 2, 6)), ']': ((4, 6),(3, 4, 5)),
+     '£': ((4,), (1, 2, 3)), '•': ((4, 5, 6),(2, 5, 6)), '¢': ((4,), (1, 4)), 
+    '©': ((4, 5), (1, 4)), '†': (), '‡': (), '—': (), '——': (), '~': (), '°': (),
+    '〃': (), '÷': (), '$': (), '″': (),
+    '=': (), '€': (), '¡': (), #'′': (),
+     '♀': (),
+    '₣': (),
+    '¿': (), '|': (), '_': (), '♂': (), '−': (), '×': (), '₦': (),
+    '¶': (), '+': (),
+    '®': (), '§': (),
+    '™': (),
+    '¥': ()
 }
 
 abbr = { v:k for k,v in rev_abbr.items()}

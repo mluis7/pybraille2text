@@ -35,8 +35,9 @@ numbers = {
     }
 rev_numbers = {v:k for k,v in numbers.items()}
 
-abbreviations = {
-    }
+abbreviations = {}
+
+not_transla = {}
 
 last_word = ''
 y_txt_start = 703 #680 #620
@@ -48,6 +49,22 @@ def visitor_before(op, args, cm, t):
 
 def visitor_body(text, cm, tm, fontDict, fontSize):
     '''
+    Text is always made of regular ascii characters so the pdf contains 
+    a braille character but pypdf returns the ascii.
+    The character equivalent tuple is looked up on the dictionary.
+    [pdf]    [pypdf]   [cell_map key]
+    
+    * .        r        (1,2,3,5)
+    * *
+    * .
+    
+    Braille can be reconstructed from text looking up the flattened tuple
+    on unicodedata
+    
+    [text]   [tuple]         [unicodedata name]
+    
+      r     (1,2,3,5)     'BRAILLE PATTERN DOTS-1235'
+    
     cm      : current transformation matrix
     tm      : text matrix
     fontDict: font-dictionary
@@ -63,10 +80,11 @@ def visitor_body(text, cm, tm, fontDict, fontSize):
         braille_tpls = []
         if text in ['many']:
             print(f"text: '{text}'", tm)
-        if y < y_txt_start and text not in ['', ' ', '\n'] and '10.' not in text:
+        if y < y_txt_start and text not in ['', ' ', '\n'] and '[10' not in text:
+            last_word = text
             if (x > xcolumn[0][0] and x < xcolumn[0][1]) or (x > xcolumn[1][0] and x < xcolumn[1][1]):
                 #print(f"text: '{text}'")
-                last_word = text
+                
                 if last_word not in rev_abbr:
                     abbreviations[text] = None
             elif (x > xcolumn[0][1] and x < xcolumn[1][0]) or (x > xcolumn[1][1]):
@@ -91,6 +109,7 @@ def visitor_body(text, cm, tm, fontDict, fontSize):
                         if c in rev_comp_map:
                             braille_tpls.extend([m for m in rev_comp_map[c]])
                         else:
+                            not_transla[last_word] = tuple(braille_tpls) 
                             print(f"ERROR. '{c} ({ord(c)})' not found for {last_word} ({braille_tpls})")
                         pass
                 if last_word not in rev_abbr:
@@ -112,6 +131,8 @@ with open('/home/lmc/projects/eclipse-workspace/SOPython/lmc/braille_to_text_poc
     
         text = page.extract_text( visitor_text=visitor_body) #
     print(abbreviations)
+    print('\n')
+    print(not_transla)
     #text = page.extract_text()
     #print(text)
 
