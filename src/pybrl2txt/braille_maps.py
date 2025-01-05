@@ -7,11 +7,11 @@ ACUTE = 'ACUTE' #  ((4, 5), (3, 4))((1,),) -> á
 UPPER = 'UPPER'
 NUMBER = 'NUMBER'
 #(4,5), # initial letter contraction
-ILC45 = (4, 5)
+ILC45 = 'ILC45'
 #(4,5,6), # initial letter contraction
-ILC456 = (4, 5, 6)
+ILC456 = 'ILC456'
 # (5,6), # initial letter contraction
-ILC56 = (5, 6)
+ILC56 = 'ILC56'
 
 cell_map = {
     (1,): 'a', (1,2): 'b', (1,4): 'c', (1,4,5): 'd', (1,5): 'e',
@@ -36,6 +36,12 @@ prefixes = { UPPER: (6,), # Upper case prefix
             #(2,5,6),
             NUMBER: (3,4,5,6), # numeral prefix
             ACUTE: ((4, 5), (3, 4)),
+            #(4,5), # initial letter contraction
+            ILC45: (4, 5),
+            #(4,5,6), # initial letter contraction
+            ILC456: (4, 5, 6),
+            # (5,6), # initial letter contraction
+            ILC56: (5, 6),
             } 
 
 # extracted from https://www.brailleauthority.org/ueb/symbols_list.pdf

@@ -437,12 +437,13 @@ def translate_word_text_by_indexes(word_tuples, line_num):
     line_other = ''
     total_errors = 0
     prefix = None
+    pfx_vals = pfx.values()
     for w, wrd in enumerate(word_tuples):
         #print("wrd", wrd)
         if wrd[-1] is BLANK:
             prefix = None
             wrd = tuple(wrd[:-1])
-        if wrd[0] in pfx.values():
+        if wrd[0] in pfx_vals:
             prefix =pfx[UPPER]
         
         wrd_txt = ''
@@ -462,7 +463,7 @@ def translate_word_text_by_indexes(word_tuples, line_num):
                 line_other += sym[wrd]
             else:
                 for char in wrd:
-                    if char in pfx.values():
+                    if char in pfx_vals:
                         prefix = char
                         continue
                     if prefix ==  pfx[NUMBER] and char in numbers:
@@ -502,7 +503,7 @@ def main():
     
     base_dir = '/home/lmc/projects/eclipse-workspace/SOPython/lmc/braille_to_text_poc'
     cfg_path = '../resources/abbreviations.yml'
-    cfg_path = '../resources/abbreviations_brl_single_line.yml'
+    #cfg_path = '../resources/abbreviations_brl_single_line.yml'
     
     #image_path = "braille-poem2.png"
     #image_path = "braille.jpg"
