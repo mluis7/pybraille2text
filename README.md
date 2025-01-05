@@ -20,7 +20,7 @@ Blob detection is very sensitive to image quality so currently it's tuned for th
 
 - Width: around 1100 px
 - Must be a grayscale image
-- white margin round dots has an impact and should be at least 1.5 times the size of a character (empirical).
+- white margin around dots area has an impact and should be at least 1.5 times the width/height of a character (empirical).
 - If small dots are detected then the contrast should be increased.
 
 Tuning the detection parameters can be done by setting `cv2_cfg.detect.show_detect: true` in the configuration file.
