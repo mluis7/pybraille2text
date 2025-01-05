@@ -114,7 +114,7 @@ rev_abbr = {'about': ((1,), (1, 2)), 'above': ((1,), (1, 2), (1, 2, 3, 6)), 'acc
         'yourselves': ((1, 3, 4, 5, 6), (1, 2, 3, 5), (1, 2, 3, 6), (2, 3, 4))
 }
 
-symbols = {
+rev_symbols = {
     ':': ((2, 5),),
     '&': ((4,), (1, 2, 3, 4, 6)), '<': ((4,), (1, 2, 6)), '>': ((4,), (3, 4, 5)), '_c': (), 
     "'": ((3,)), '"*': ((5,), (3, 5)), '_m': (), '"': (), '#': (),
@@ -134,6 +134,7 @@ symbols = {
 }
 
 abbr = { v:k for k,v in rev_abbr.items()}
+symbols = { v:k for k,v in rev_symbols.items()}
 
 def print_flattened_keys_values():
     sk = {}
@@ -148,4 +149,16 @@ def print_flattened_keys_values():
     
     for k in sorted(sk.keys()):
         print(k, sk[k])
+
+def get_by_sorted_value(bmap):
+    """Split abbreviations map by tuple length to improve translation efficiency.
+    Returns maps for lengths 1, 2 and 3 or more.
+    """
+    
+    smap1 = sorted([k for k in bmap if len(bmap[k]) == 1], key=lambda key: len(bmap[key]))
+    smap2 = sorted([k for k in bmap if len(bmap[k]) == 2], key=lambda key: len(bmap[key]))
+    smap3 = sorted([k for k in bmap if len(bmap[k]) > 2], key=lambda key: len(bmap[key]))
+    return smap1, smap2, smap3
+    
+abbr1, abbr2, abbr3 = get_by_sorted_value(rev_abbr)
 

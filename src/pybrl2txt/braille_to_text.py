@@ -11,7 +11,7 @@ import numpy as np
 import unicodedata as uc
 from pybrl2txt.models import Page, Line, Area
 from pybrl2txt.braille_maps import BLANK, abbr, cell_map, numbers, prefixes as pfx, rev_abbr,\
-    UPPER, NUMBER
+    symbols as sym, UPPER, NUMBER
 from future.builtins.misc import isinstance
 import logging
 
@@ -442,6 +442,9 @@ def translate_word_text_by_indexes(word_tuples, line_num):
         if wrd[-1] is BLANK:
             prefix = None
             wrd = tuple(wrd[:-1])
+        if wrd[0] in pfx.values():
+            prefix =pfx[UPPER]
+        
         wrd_txt = ''
         if len(wrd) == 1:
             if wrd in abbr:
@@ -454,6 +457,9 @@ def translate_word_text_by_indexes(word_tuples, line_num):
             if wrd in abbr:
                 line_text.append(abbr[wrd])
                 line_abbr += f"{abbr[wrd]} "
+            elif wrd in sym:
+                wrd_txt += sym[wrd]
+                line_other += sym[wrd]
             else:
                 for char in wrd:
                     if char in pfx.values():
@@ -469,6 +475,10 @@ def translate_word_text_by_indexes(word_tuples, line_num):
                         line_other += cell_map[char]
                         if prefix ==  pfx[NUMBER]:
                             prefix = None
+                    elif char in sym:
+                        wrd_txt += sym[char]
+                        line_other += sym[char]
+                        
                 if prefix is not None and prefix == pfx[UPPER]:
                     wrd_txt = wrd_txt[0].upper() + ''.join(wrd_txt[1:])
                     prefix = None
@@ -502,7 +512,8 @@ def main():
     #image_path = "result2.brf_ABC.png"
     #image_path = "abbreviations_brl_abc.png"
     image_path = "abbreviations_brl_1line.png"
-    image_path = "abbreviations_brl_single_line.png"
+    #image_path = "abbreviations_brl_single_line.png"
+    #image_path = "abbreviations_brl_camel.png"
     
     
     grade = 2
@@ -594,7 +605,7 @@ def main():
     print(f'Translated abbreviations {"-" * 80}')
     print(' '.join(found_text))
     print(f'Incorrect translations {"-" * 80}')
-    print(''.join(not_found_text))
+    print('~'.join(not_found_text))
     
 #    for ra in rev_abbr:
 #        if ra not in found_text:
