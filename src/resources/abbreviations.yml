@@ -5,9 +5,10 @@ grade: 2
 parse:
     round_to: 0
     offset: 1.15
+    #xmin: 54
 cv2_cfg:
     detect:
-        min_area: 14
+        min_area: 13
         max_area: 200
         min_inertia_ratio: 0.85
         min_circularity: 0.80

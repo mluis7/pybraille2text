@@ -10,12 +10,18 @@ import cv2
 import numpy as np
 import unicodedata as uc
 from pybrl2txt.models import Page, Line, Area
-from pybrl2txt.braille_maps import BLANK, abbr, cell_map, numbers, prefixes, rev_abbr
+from pybrl2txt.braille_maps import BLANK, abbr, cell_map, numbers, prefixes as pfx, rev_abbr,\
+    UPPER, NUMBER
 from future.builtins.misc import isinstance
 import logging
 
 logger = logging.getLogger("pybrl2txt")
-
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(levelname)-7s [ %(name)s ] %(message)s" ,
+#    format="[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
+#    datefmt="%d/%b/%Y %H:%M:%S",
+    stream=sys.stdout)
 #abbr = { tuple([t for t in v]) : k for k,v in rev_abbr.items()}
 #abbr = dict(map(reversed, rev_abbr.items()))
 
@@ -160,7 +166,10 @@ def get_keypoints(img_path, cv2_params):
 
 def cell_keypoints_to_braille_indexes(cell, line_params, idx):
     """Return a sorted tuple representing dot indexes in the cell.
-    The tuple should map to a text character in cell_map dict.
+    The tuple should map to a text character in a braille_maps dict.
+    The index detection logic could probably be simplified/merged but 
+    keeping it verbose helps debugging a lot.
+    
     Indexes are
     1 4
     2 5
@@ -333,6 +342,7 @@ def translate_cell(cell, line_params, idx):
     return brl_idx, error_count
 
 def translate_cells(cells, line_params):
+    """Translate list of coordinates tuples to list of Braille indexes tuples by word""" 
     word_tuples = []
     word_tpl = []
     total_trn_err = 0
@@ -344,6 +354,7 @@ def translate_cells(cells, line_params):
         if tcell is not BLANK:
             word_tpl.append(tcell)
         elif len(word_tpl) > 0:
+            word_tpl.append(BLANK)
             word_tuples.append(tuple(word_tpl))
             word_tpl = []
     if total_trn_err > 0:
@@ -382,8 +393,8 @@ def translate_line(line_coor, ln, page):
         logger.warning(f"WARN. Line cell size changed: page csize: {page.cell_params.csize}, line csize {line_params.cell_params.csize}")
         line_params.cell_params.csize = page.cell_params.csize
         
-    logger.debug(f"x params: xcell {cp.xdot :.0f}, xmin {line_params.xmin:.0f}, xsep {cp.xsep:.0f}, csize {cp.csize:.0f}, xmax {line_params.xmax:.0f}")
-    logger.debug(f"y params: ycell {cp.ydot:.0f}, ymin {line_params.ymin:.0f}")
+    logger.debug(f"Line: {ln}, X params: xcell {cp.xdot :.0f}, xmin {line_params.xmin:.0f}, xsep {cp.xsep:.0f}, csize {cp.csize:.0f}, xmax {line_params.xmax:.0f}")
+    logger.debug(f"Line: {ln}, Y params: ycell {cp.ydot:.0f}, ymin {line_params.ymin:.0f}")
     
     #cell_count_expected = int((line_params.xmax - line_params.xmin) / line_params.cell_params.csize)
     cells = []
@@ -412,7 +423,7 @@ def translate_line(line_coor, ln, page):
         cell_start = get_cell_start(line_params, idx)
         cell_end += line_params.cell_params.csize
     
-    logger.debug(f"cell width: {line_params.cell_params.csize}, pt count: {len(line_coor)}, Cells: {len(cells)}, Spaces: {blank_count}")
+    logger.debug(f"Line {ln}, Found cells: {len(cells)}, Spaces: {blank_count}, cell width: {line_params.cell_params.csize}, pt count: {len(line_coor)}")
     return cells, line_params, blank_count
 
 
@@ -428,6 +439,9 @@ def translate_word_text_by_indexes(word_tuples, line_num):
     prefix = None
     for w, wrd in enumerate(word_tuples):
         #print("wrd", wrd)
+        if wrd[-1] is BLANK:
+            prefix = None
+            wrd = tuple(wrd[:-1])
         wrd_txt = ''
         if len(wrd) == 1:
             if wrd in abbr:
@@ -442,19 +456,20 @@ def translate_word_text_by_indexes(word_tuples, line_num):
                 line_abbr += f"{abbr[wrd]} "
             else:
                 for char in wrd:
-                    if char in prefixes:
+                    if char in pfx.values():
                         prefix = char
                         continue
-                    else:
-                        if prefix ==  (3, 4 ,5 ,6) and char in numbers:
-                            wrd_txt += numbers[char]
-                            line_other += numbers[char]
-                        elif char in cell_map:
-                            wrd_txt += cell_map[char]
-                            line_other += cell_map[char]
-                            if prefix ==  (3, 4 ,5 ,6):
-                                prefix = None
-                if prefix is not None and prefix == (6,):
+                    if prefix ==  pfx[NUMBER] and char in numbers:
+                        wrd_txt += numbers[char]
+                        line_other += numbers[char]
+                        continue
+                    
+                    if char in cell_map:
+                        wrd_txt += cell_map[char]
+                        line_other += cell_map[char]
+                        if prefix ==  pfx[NUMBER]:
+                            prefix = None
+                if prefix is not None and prefix == pfx[UPPER]:
                     wrd_txt = wrd_txt[0].upper() + ''.join(wrd_txt[1:])
                     prefix = None
                 line_text.append(wrd_txt)
@@ -473,10 +488,12 @@ def translate_word_text_by_indexes(word_tuples, line_num):
     return line_text, total_errors
 
 def main():
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     
     base_dir = '/home/lmc/projects/eclipse-workspace/SOPython/lmc/braille_to_text_poc'
     cfg_path = '../resources/abbreviations.yml'
+    cfg_path = '../resources/abbreviations_brl_single_line.yml'
+    
     #image_path = "braille-poem2.png"
     #image_path = "braille.jpg"
     #image_path = "technical.jpg"
@@ -484,8 +501,9 @@ def main():
     #image_path = "result2.brf.png"
     #image_path = "result2.brf_ABC.png"
     #image_path = "abbreviations_brl_abc.png"
-    #image_path = "abbreviations_brl_small.png"
     image_path = "abbreviations_brl_1line.png"
+    image_path = "abbreviations_brl_single_line.png"
+    
     
     grade = 2
     round_to = 2
@@ -494,10 +512,11 @@ def main():
         config = yaml.load(f, Loader=yaml.SafeLoader)
         grade = config['grade']
         round_to = config['parse']['round_to']
+        xmin = config['parse'].get('xmin')
         show_detect = config['cv2_cfg']['detect']['show_detect']
     
     img_path = f"{base_dir}/{image_path}"
-    logger.info(f"Starting braille to text translation of {image_path}")
+    logger.info(f"Starting Grade {grade} braille to text translation of {image_path}")
     keypoints, image = get_keypoints(img_path, config)
     # map of keypoints coordinates to keypoints
     kp_map = { (round(kp.pt[0], round_to), round(kp.pt[1], round_to)): kp for kp in keypoints}
@@ -505,7 +524,7 @@ def main():
     areas = np.unique(np.array([round(kp.size) for kp in keypoints]))
     areas_diff = np.diff(areas)
     if areas_diff.size > 0 and areas_diff.max() >= config['cv2_cfg']['detect']['min_area'] * 0.5:
-        logger.warning("Too many blob sizes detected. Cell detection will probably be poor or bad.")
+        logger.warning(f"Too many blob sizes detected. Cell detection will probably be poor or bad. Sizes: {areas}")
     # all dots coordinates, sorted to help find lines.
     blob_coords = np.array(list(kp_map.keys()))
     #blob_coords = np.array([kp.pt for kp in keypoints])
@@ -514,11 +533,13 @@ def main():
     
     page, xydiff = get_area_parameters(blob_coords, Page())
     cp = page.cell_params
+    if xmin is not None:
+        page.xmin = xmin
     
-    logger.info(f"blob_coords: {len(blob_coords)}, xydiff: {len(xydiff)}")
-    logger.info(f"x params: xcell {cp.xdot :.0f}, xmin {page.xmin:.0f}, xsep {cp.xsep:.0f}, csize {cp.csize:.0f}, xmax {page.xmax:.0f}")
-    logger.info(f"y params: ycell {cp.ydot:.0f}, ymin {page.ymin:.0f}")
-    logger.info(f"areas {areas}")
+    logger.info(f"Detected blobs: {len(blob_coords)}")
+    logger.info(f"Page X params: xcell {cp.xdot :.0f}, xmin {page.xmin:.0f}, xsep {cp.xsep:.0f}, csize {cp.csize:.0f}, xmax {page.xmax:.0f}")
+    logger.info(f"Page Y params: ycell {cp.ydot:.0f}, ymin {page.ymin:.0f}")
+    logger.info(f"keypoint sizes {areas}")
     # List of list of cells by line_params
     detected_lines, lines_coord = group_by_lines(kp_map, blob_coords, xydiff, page)
    
@@ -534,6 +555,8 @@ def main():
     for ln, line_coor in enumerate(lines_coord):
         cells, line_params, blank_count = translate_line(line_coor, ln, page)
         cp = line_params.cell_params
+        if xmin is not None:
+            line_params.xmin = xmin
         
         word_tuples.append((ln, translate_cells(cells, line_params)))
         total_blank += blank_count

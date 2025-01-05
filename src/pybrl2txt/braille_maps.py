@@ -1,6 +1,8 @@
 
 __all__ = ['BLANK', 'cell_map', 'numbers', 'prefixes', 'abbr']
 BLANK = (0,0,0,0,0,0)
+UPPER = 'UPPER'
+NUMBER = 'NUMBER'
 
 cell_map = {
     (1,): 'a', (1,2): 'b', (1,4): 'c', (1,4,5): 'd', (1,5): 'e',
@@ -21,12 +23,13 @@ numbers = {
     (1,2,4): '6', (1,2,4,5): '7', (1,2,5): '8', (2,4): '9', (2,4,5): '0',
     }
 
-prefixes = [(6,), # Upper case prefix 
+prefixes = { UPPER: (6,), # Upper case prefix 
             #(2,5,6),
             #(4,5), # initial letter contraction
             #(4,5,6), # initial letter contraction
             # (5,6), # initial letter contraction
-            (3,4,5,6)] # numeral prefix
+            NUMBER: (3,4,5,6)
+            } # numeral prefix
 
 # extracted from https://www.brailleauthority.org/ueb/symbols_list.pdf
 rev_abbr = {'about': ((1,), (1, 2)), 'above': ((1,), (1, 2), (1, 2, 3, 6)), 'according': ((1,), (1, 4)),
