@@ -2,13 +2,15 @@
 name: abbraviations
 grade: 2
 
+cfg:
+    logging_level: info
 parse:
     round_to: 0
     offset: 1.15
     #xmin: 54
 cv2_cfg:
     detect:
-        min_area: 13
+        min_area: 18
         max_area: 200
         min_inertia_ratio: 0.85
         min_circularity: 0.80
