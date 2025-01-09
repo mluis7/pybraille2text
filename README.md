@@ -86,8 +86,8 @@ Translate cell coordinates to dot indexes tuples like `((4, 5, 6), (3, 4, 6),)`.
 Those tuples are the keys or the values on `pybrl2txt.braille_maps` dictionaries.
 
 There are 2 available methods for translation:
-- Cell normalization (current). See: `pybrl2txt.braille_to_text.cell_to_braille_indexes_no_magic` docstrings.
-- Cell coordinates computation: See: `pybrl2txt.braille_to_text.cell_keypoints_to_braille_indexes` docstrings.
+- Cell normalization (current). See: `pybrl2txt.braille_to_text.cell_keypoints_to_braille_indexes` docstrings.
+- Cell coordinates computation: See: `pybrl2txt.braille_to_text.cell_to_braille_indexes_no_magic` docstrings.
 
 ## Translate dot indexes to text
 Probably the toughest part because Braille reading rules must be applied.
