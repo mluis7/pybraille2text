@@ -5,9 +5,11 @@ grade: 2
 cfg:
     logging_level: info
 parse:
+    #lang: es
     round_to: 0
     offset: 1.15
     #xmin: 54
+    #normalized: false
 cv2_cfg:
     detect:
         min_area: 18
