@@ -1,6 +1,6 @@
 
 __all__ = ['BLANK', 'cell_map', 'numbers', 'prefixes', 'abbr', 'symbols', 'BLANK', 'ACUTE' \
-           'NUMBER', 'UPPER']
+           'NUMBER', 'UPPER', 'ilc_pfx', 'abbr1', 'abbr2', 'abbr3']
 BLANK = (0,0,0,0,0,0)
 
 ACUTE = 'ACUTE' #  ((4, 5), (3, 4))((1,),) -> á
@@ -43,6 +43,8 @@ prefixes = { UPPER: (6,), # Upper case prefix
             # (5,6), # initial letter contraction
             ILC56: (5, 6),
             } 
+
+ilc_pfx = [prefixes[ILC45], prefixes[ILC456], prefixes[ILC56]]
 
 # extracted from https://www.brailleauthority.org/ueb/symbols_list.pdf
 rev_abbr = {'about': ((1,), (1, 2)), 'above': ((1,), (1, 2), (1, 2, 3, 6)), 'according': ((1,), (1, 4)),

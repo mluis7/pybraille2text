@@ -9,9 +9,10 @@ import yaml
 import cv2
 import numpy as np
 import unicodedata as uc
+import louis
 from pybrl2txt.models import Page, Line, Area
 from pybrl2txt.braille_maps import BLANK, abbr, cell_map, numbers, prefixes as pfx, rev_abbr,\
-    symbols as sym, UPPER, NUMBER, abbr1, abbr2, abbr3
+    symbols as sym, UPPER, NUMBER, abbr1, abbr2, abbr3, ilc_pfx
 from future.builtins.misc import isinstance
 import logging
 
@@ -136,7 +137,7 @@ def get_area_parameters(coords, area_obj: Area):
     yuniq_from_diff = np.unique(np.round(xydiff[(xydiff[:,1] > 1)][:,1]))
     ycell = yuniq_from_diff.min()
     # x separation between cells
-    xsep = np.unique(xydiff[(xydiff[:,0] > xcell + 1)][:,0]).min()
+    xsep = np.unique(xydiff[(xydiff[:,0] > xcell)][:,0]).min()
     
     area_obj.cell_params.xdot = xcell
     area_obj.cell_params.ydot = ycell
@@ -165,7 +166,7 @@ def get_keypoints(img_path, cv2_params):
     return keypoints, image
 
 
-def cell_to_braille_indexes_no_magic(cell, line_params, cell_start, idx):
+def cell_to_braille_indexes_no_magic(cell, line_params, idx):
     """Return a sorted tuple representing dot indexes in the cell.
     The tuple should map to a text character in a braille_maps dict.
     The index detection logic could probably be simplified/merged but 
@@ -214,12 +215,15 @@ def cell_to_braille_indexes_no_magic(cell, line_params, cell_start, idx):
     . .  * .  . .  . . . *  . .
     . .  . .  * .  . . . .  . *
     """
+    is_cell_error = False
     cause = 'UNKNOWN'
     cell_idxs = []
     cell_idx = -1
     ydot14 = line_params.ydot14
     ydot25 = line_params.ydot25
     ydot36 = line_params.ydot36
+    
+    cell_start = get_cell_start(line_params, idx)
     cell_middle = round(cell_start + line_params.cell_params.xdot * 0.8)
     xcol123 = cell[:, 0].min()
     xcol456 = cell[:, 0].max()
@@ -338,11 +342,12 @@ def cell_keypoints_to_braille_indexes(cell, line_params, idx):
     """
     ref_cell = {(0,0): 1, (1,0): 4, (2,0): 4,
                 (0,1): 2, (1,1): 5, (2,1): 5,
-                (0,2): 3, (1,2): 6, (2,2): 4,
+                (0,2): 3, (1,2): 6, (2,2): 6,
                 }
     if idx == 0 and line_params.ymax > 800:
         pass
-    elif line_params.line_num == 2 and idx == 0:
+    
+    if line_params.line_num == 2 and idx == 4:
         pass
     
     if len(cell) > 6:
@@ -361,12 +366,17 @@ def cell_keypoints_to_braille_indexes(cell, line_params, idx):
     celln = celln[np.lexsort((celln[:, 1], celln[:, 0]))]
     celln[:,0] = np.round(np.divide(celln[:,0], line_params.cell_params.xdot))
     celln[:,1] = np.round(np.divide(celln[:,1], line_params.cell_params.ydot))
+    # get dot indexes or -1 if not found
     cell_idxs = [ref_cell.get((x[0],x[1]), -1)  for x in celln]
+    
     is_cell_error = -1 in cell_idxs
-    if is_cell_error:
-        logger.error(f"Line: {line_params.line_num} - index translation error\n{cell}\n{celln} -> {cell_idxs}")
+    dup_cell_error = len(cell_idxs) > len(set([x for x in cell_idxs]))
+    if is_cell_error or dup_cell_error:
+        cause = 'duplicate ' if dup_cell_error else ''
+        logger.error(f"Line: {line_params.line_num}/{idx} - {cause}index translation error on\ncell: {cell}\nnorm: {celln} -> ids: {cell_idxs}")
+
     #cell_idxs, is_cell_error = cell_to_braille_indexes_no_magic(cell, line_params, cell_start, idx)
-    return tuple(sorted(cell_idxs)), is_cell_error
+    return tuple(sorted(cell_idxs)), is_cell_error or dup_cell_error
 
 def translate_cell(cell, line_params, idx):
     """Translate cell coordinates to braille cell indexes."""
@@ -374,7 +384,10 @@ def translate_cell(cell, line_params, idx):
     if cell is BLANK:
         #print(f"SPACE: {idx}, {BLANK}")
         return BLANK, 0
-    brl_idx, is_cell_error = cell_keypoints_to_braille_indexes(cell, line_params, idx)
+    if line_params.cell_params.normalized:
+        brl_idx, is_cell_error = cell_keypoints_to_braille_indexes(cell, line_params, idx)
+    else:
+        brl_idx, is_cell_error = cell_to_braille_indexes_no_magic(cell, line_params, idx)
     
     return brl_idx, is_cell_error
 
@@ -415,6 +428,7 @@ def translate_line(line_coor, ln, page):
     line_params.line_num = ln
     line_params = get_area_parameters(line_coor, line_params)[0]
     cp = line_params.cell_params
+    cp.normalized = page.cell_params.normalized
     
     # Line min x coordinate is greater than page one so the 
     # line probably starts with dots in the second column (4,5,6)
@@ -443,13 +457,12 @@ def translate_line(line_coor, ln, page):
         line_params.xmin = page.xmin
         cell_start = line_params.xmin
     
-    cell_end = line_params.xmin + line_params.cell_params.csize #  line_params.cell_params.xdot + line_params.cell_params.xsep / 2
+    cell_end = line_params.xmin + line_params.cell_params.csize
     line_end = 0
     
     while line_end <= line_params.xmax:
-        #print("line, cell_start, cell_end", ln, cell_start, cell_end)
         cell = line_coor[(line_coor[:, 0] >= cell_start) & (line_coor[:, 0] < cell_end)]
-        if len(cell) == 0:# or (len(cell) > 0 and cell[0][0] > cell_end):
+        if len(cell) == 0:
             cells.append(BLANK)
             line_end += line_params.cell_params.csize
             blank_count += 1
@@ -463,131 +476,95 @@ def translate_line(line_coor, ln, page):
     logger.debug(f"Line {ln}, Found cells: {len(cells)}, Spaces: {blank_count}, cell width: {line_params.cell_params.csize}, pt count: {len(line_coor)}")
     return cells, line_params, blank_count
 
-def translate_word_text_by_indexes(word_tuples, line_num):
-    """Translate cell indexes to text using maps.
-    This is the toughest task since Braille reading rules must be applied. 
+
+
+def call_louis(word_tuples, line_num, lang='en'):
+    """Convert index tuples to unicode characters for the whole line,
+    then supply that braille unicode text to python-louis to get translated text.
     """
     
-    line_text = []
-    line_abbr = ''
-    line_other = ''
-    total_errors = 0
-    prefix = None
-    pfx_vals = pfx.values()
+    #TODO: build dict of available languages dynamically.
+    languajes = {'es': 'es-g2.ctb', 'en': 'en-ueb-g2.ctb'}
+    braille_uni_str = ''
     for w, wrd in enumerate(word_tuples):
-        
-        if wrd[-1] is BLANK:
-            prefix = None
-            wrd = tuple(wrd[:-1])
-        #print("wrd", len(wrd), wrd)
-        if wrd[0] in pfx_vals:
-            prefix = wrd[0]
-        
-        wrd_txt = ''
-        if len(wrd) == 1:
-            if wrd in abbr:
-                line_text.append(abbr[wrd])
-                line_abbr += f"{abbr[wrd]} "
-            elif wrd[0] in cell_map:
-                line_text.append(cell_map[wrd[0]])
-                line_other += f"{cell_map[wrd[0]]} "
-        elif len(wrd) > 1:
-            if wrd in abbr:
-                line_text.append(abbr[wrd])
-                line_abbr += f"{abbr[wrd]} "
-            elif wrd in sym:
-                wrd_txt += sym[wrd]
-                line_other += sym[wrd]
-            else:
-                for char in wrd:
-                    if char in pfx_vals:
-                        prefix = char
-                        continue
-                    if prefix ==  pfx[NUMBER] and char in numbers:
-                        wrd_txt += numbers[char]
-                        line_other += numbers[char]
-                        continue
-                    
-                    if char in cell_map:
-                        wrd_txt += cell_map[char]
-                        line_other += cell_map[char]
-                        if prefix ==  pfx[NUMBER]:
-                            prefix = None
-                    elif char in sym:
-                        wrd_txt += sym[char]
-                        line_other += sym[char]
-                        
-                if prefix is not None and prefix == pfx[UPPER]:
-                    wrd_txt = wrd_txt[0].upper() + ''.join(wrd_txt[1:])
-                    prefix = None
-                line_text.append(wrd_txt)
-                wrd_txt = ''
-                line_other += f" {wrd}\n"
-        else:
-            if wrd == ():
+        for cell in wrd:
+            res_parts = []
+            if cell is BLANK:
+                if w < len(word_tuples) - 1:
+                    braille_uni_str += ' '
                 continue
-            else:
-                line_text.append("XXXXX")
-            total_errors += 1
-    
-    #print(f" abbr found: {line_abbr}")
-    #print(f"other found: {line_other}")
-    logger.info(f"Line {line_num}: Tuples to words translations: {len(line_text)}")
-    return line_text, total_errors
-
+            res = ''.join([str(idx) for idx in cell])
+            res_parts.append(res)
+            uni_prefix = 'BRAILLE PATTERN DOTS-'
+            try:
+                uni_name = f'{uni_prefix}{res}'
+                braille_uni_str += uc.lookup(uni_name)
+            except Exception as e:
+                logger.debug(f"Line {line_num}: Index to unicode conversion.: {e}, cell: {cell}", exc_info=False)
+                # Add an inverted question mark (¿)for not found unicode characters.
+                for c in ['45', '56','236']:
+                    braille_uni_str += uc.lookup(f'{uni_prefix}{c}')
+    lou_transl = louis.backTranslate([languajes[lang]], braille_uni_str)
+    return lou_transl[0]
 
 def parse_image_file(cfg_path, img_path):
     with open(cfg_path, 'r') as f:
         config = yaml.load(f, Loader=yaml.SafeLoader)
         grade = config['grade']
         round_to = config['parse']['round_to']
+        lang = config['parse'].get('lang', 'en')
         xmin = config['parse'].get('xmin')
+        normalized = config['parse'].get('normalized', True)
         dot_min_sep = config['parse'].get('dot_min_sep')
         show_detect = config['cv2_cfg']['detect']['show_detect']
         if config.get('cfg') is not None:
             logging_level = logging.getLevelName(config.get('cfg').get('logging_level', 'INFO').upper())
             logger.setLevel(logging_level)
-    logger.info(f"Starting Grade {grade} braille to text translation of {img_path}")
+    logger.info(f"Starting '{lang}' Grade {grade} braille to text translation of {img_path}")
     keypoints, image = get_keypoints(img_path, config)
     
-    # map of keypoints coordinates to keypoints
-    kp_map = { (round(kp.pt[0], round_to), round(kp.pt[1], round_to)): kp for kp in keypoints}
-    areas = np.unique(np.array([round(kp.size) for kp in keypoints]))
-    areas_diff = np.diff(areas)
-    if areas_diff.size > 0 and areas_diff.max() >= config['cv2_cfg']['detect']['min_area'] * 0.5:
-        logger.warning(f"Too many blob sizes detected. Cell detection will probably be poor or bad. Sizes: {areas}")
-    
-    # all dots coordinates, sorted to help find lines.
-    blob_coords = np.array(list(kp_map.keys())) #blob_coords = np.array([kp.pt for kp in keypoints])
-    blob_coords = blob_coords[np.lexsort((blob_coords[:, 0], blob_coords[:, 1]))] #blob_coords = np.round(blob_coords, decimals=2)
-    
-    page, xydiff = get_area_parameters(blob_coords, Page())
-    cp = page.cell_params
-    if xmin is not None:
-        page.xmin = xmin
-    if dot_min_sep is not None:
-        cp.dot_min_sep = dot_min_sep
-    if page.xmax / cp.csize > 40:
-        logger.warning("More than 40 cells per line could be found exceeding the recommended 40.")
-    
-    logger.info(f"Detected blobs: {len(blob_coords)}, max cells per line: {page.xmax/cp.csize:.0f}")
-    logger.info(f"Page X params: xcell {cp.xdot :.0f}, xmin {page.xmin:.0f}, xsep {cp.xsep:.0f}, csize {cp.csize:.0f}, xmax {page.xmax:.0f}")
-    logger.info(f"Page Y params: ycell {cp.ydot:.0f}, ymin {page.ymin:.0f}")
-    logger.info(f"keypoint sizes {areas}")
-    
-    # List of list of cells by line_params
-    detected_lines, lines_coord = group_by_lines(kp_map, blob_coords, xydiff, page)
-    
-    if show_detect:
-        show_detection(image, detected_lines, cp.xdot, cp.csize, page.xmin, 400)
-    
     text = ''
-    lines_words = []
+    ln = -1
     total = 0
     total_errors = 0
     total_blank = 0
     word_tuples = []
     try:
+        # map of keypoints coordinates to keypoints
+        kp_map = { (round(kp.pt[0], round_to), round(kp.pt[1], round_to)): kp for kp in keypoints}
+        areas = np.unique(np.array([round(kp.size) for kp in keypoints]))
+        areas_diff = np.diff(areas)
+        if areas_diff.size > 0 and areas_diff.max() >= config['cv2_cfg']['detect']['min_area'] * 0.5:
+            logger.warning(f"Too many blob sizes detected. Cell detection will probably be poor or bad. Sizes: {areas}")
+        
+        # all dots coordinates, sorted to help find lines.
+        blob_coords = np.array(list(kp_map.keys()))
+        blob_coords = blob_coords[np.lexsort((blob_coords[:, 0], blob_coords[:, 1]))]
+        
+        page, xydiff = get_area_parameters(blob_coords, Page())
+        cp = page.cell_params
+        if xmin is not None:
+            page.xmin = xmin
+        if not normalized:
+            cp.normalized = normalized
+        if dot_min_sep is not None:
+            cp.dot_min_sep = dot_min_sep
+        if page.xmax / cp.csize > 40:
+            logger.warning("More than 40 cells per line could be found exceeding the recommended 40.")
+        
+        logger.info(f"Detected blobs: {len(blob_coords)}, max cells per line: {page.xmax/cp.csize:.0f}")
+        logger.info(f"Page X params: xcell {cp.xdot :.0f}, xmin {page.xmin:.0f}, xsep {cp.xsep:.0f}, csize {cp.csize:.0f}, xmax {page.xmax:.0f}")
+        logger.info(f"Page Y params: ycell {cp.ydot:.0f}, ymin {page.ymin:.0f}")
+        logger.info(f"keypoint sizes {areas}")
+        
+        # List of list of cells by line_params
+        detected_lines, lines_coord = group_by_lines(kp_map, blob_coords, xydiff, page)
+        
+        if show_detect:
+            show_detection(image, detected_lines, cp.xdot, cp.csize, page.xmin, 400)
+        
+        
+        # lines to cell by index
         for ln, line_coor in enumerate(lines_coord):
             cells, line_params, blank_count = translate_line(line_coor, ln, page)
             cp = line_params.cell_params
@@ -596,85 +573,34 @@ def parse_image_file(cfg_path, img_path):
             word_tuples.append((ln, translate_cells(cells, line_params)))
             total_blank += blank_count
         
+        # Finally, get line text
         for ln_wrd_tpl in word_tuples:
             total += len(ln_wrd_tpl[1])
-            wrd_text, wrd_errors = translate_word_text_by_indexes(ln_wrd_tpl[1], ln_wrd_tpl[0])
-            text += ' '.join(wrd_text)
-            lines_words.append(wrd_text)
-            total_errors += wrd_errors
+            text += call_louis(ln_wrd_tpl[1], ln, lang)
             text += '\n'
+            
     
     except Exception as e:
-        logger.error(f"Critical error while parsing line {ln}: {e}", exc_info=True)
-        #raise e
-    return lines_words, text, total, total_blank, total_errors
+        logger.error(f"Critical error while parsing line {ln}: {e}", exc_info=logger.isEnabledFor(logging.DEBUG))
+    
+    return text, total, total_blank, total_errors
 
 def main():
-    logging.basicConfig(level=logging.WARN)
+    logging.basicConfig(level=logging.DEBUG)
     
     base_dir = '../../tests/resources'
     cfg_path = '../resources/abbreviations.yml'
-    # last best: 168 found, 7 not found
-    image_path = "abbreviations.png"
-    
-#    cfg_path = '../resources/brl.yml'
-#    image_path = "brl_quant.jpg"
-    
-    #cfg_path = '../resources/abbreviations_brl_single_line.yml'
-    
-    #image_path = "braille-poem2.png"
-    #image_path = "braille.jpg"
-    #image_path = "technical.jpg"
-    #image_path = "contracted_braille_example.webp"
-    
-#    base_dir = '/home/lmc/projects/eclipse-workspace/SOPython/lmc/braille_to_text_poc/'
-#    image_path = "abbreviations_brl_camel.png"
-    
-    #image_path = "result2.brf_ABC.png"
-    #image_path = "abbreviations_brl_abc.png"
-    
-    #image_path = "abbreviations_brl_single_line.png"
-    
-    
+    #image_path = "abbreviations.png"
+    #image_path = "alfonsina-es.png"
+    image_path = "camel-case.png"
     
     img_path = f"{base_dir}/{image_path}"
     
-    lines_words, text, total, total_blank, total_errors = parse_image_file(cfg_path, img_path)
+    text, total, total_blank, total_errors = parse_image_file(cfg_path, img_path)
 
-    found_count = 0
-    not_found_count = 0
-    not_found_text = []
-    found_text = []
-    
-    # reverse lookup of found words against rev_abbr map
-    for words in lines_words:
-        for wr in [w for w in words if w != '']:
-            if wr in rev_abbr:
-                found_text.append(wr)
-                found_count += 1
-            else:
-                not_found_text += f"{wr}"
-                not_found_count += 1                
-        found_text += '\n'
-        not_found_text += ' '
-            
     logger.info(f"Total words: {total} (spaces: {total_blank}), total_errors: {total_errors}")
-    logger.info(f"total processed words: {not_found_count + found_count}")
-    logger.info(f"total found words: {found_count}\nNot found words: {not_found_count}\n")
-    print(f'Translated abbreviations {"-" * 80}')
-    print(' '.join(found_text))
-    print(f'Incorrect translations {"-" * 80}')
-    print('~'.join(not_found_text))
 
-    # reverse lookup of words NOT found an rev_abbr map
-    # missing = []
-#    for ra in rev_abbr:
-#        if ra not in found_text:
-#            missing.append(ra)
-#    print(f'Missing abbreviations{"-" * 80}')
-#    print('\n'.join(missing))
-
-    print(f'All text {"-" * 80}')
+    print(f'\n{"-" * 80}')
     print(text)
 if __name__ == '__main__':
     main()

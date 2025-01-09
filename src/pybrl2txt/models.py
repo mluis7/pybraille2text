@@ -33,6 +33,7 @@ class CellParams(object):
     xsep = 0
     csize = 0
     ydot = 0
+    normalized = True
     
 @dataclass
 class Page(Area):

@@ -12,6 +12,7 @@ Status: Alpha/PoC
 - [Translate cell coordinates to Braille character indexes](#translate-cell-coordinates-to-braille-character-indexes)
 - [Translate dot indexes to text](#translate-dot-indexes-to-text)
 - [Tunning suggestions](#tunning-suggestions)
+- [Compiling liblouis20](#compiling-liblouis20)
 
 <!-- TOC end -->
 
@@ -36,12 +37,21 @@ for now but that text to Braille translation is also automated so it may contain
 Sample images of real Braille pages will be mostly welcomed. :-)
 
 ## Translation strategy
+In general terms
+
+```None
+Braille image --> blob coordinates --> Braille cell indexes --> Unicode Braille --> text
+```
 
 - Get a sorted numpy array of blob coordinates from opencv detected keypoints.
 - Group coordinates by line.
 - Find cells representing a character
 - Translate cell coordinates to Braille character indexes (1,2,3 for the first column, 4,5,6 for the second).
-- Translate dot indexes to text.
+- Translate dot indexes to Unicode Braille characters.
+- Translate Unicode Braille to English text with `liblouis20`.
+
+Unicode Braille character names are of the form `BRAILLE PATTERN DOTS-<cell indexes>`  
+e.g.: `BRAILLE PATTERN DOTS-1236  --> letter 'v'`
 
 ## Group coordinates by line
 Lines are detected using the coordinates differences between contiguous coordinates.  
@@ -75,11 +85,18 @@ ERROR   [ pybrl2txt ] index translation error
 Translate cell coordinates to dot indexes tuples like `((4, 5, 6), (3, 4, 6),)`.
 Those tuples are the keys or the values on `pybrl2txt.braille_maps` dictionaries.
 
-See: `pybrl2txt.braille_to_text.cell_keypoints_to_braille_indexes` docstrings.
+There are 2 available methods for translation:
+- Cell normalization (current). See: `pybrl2txt.braille_to_text.cell_to_braille_indexes_no_magic` docstrings.
+- Cell coordinates computation: See: `pybrl2txt.braille_to_text.cell_keypoints_to_braille_indexes` docstrings.
 
 ## Translate dot indexes to text
-Probably the toughest part since Braille reading rules must be applied.
-Currently just a rudimentary algorithm has been developed.
+Probably the toughest part because Braille reading rules must be applied.
+It was decided not to write a new algorithm but to use `liblouis20` library instead
+since it provides python bindings.
+The result is very promising for English language.  
+Spanish was tested but translation contained errors (~ 80% successful).
+See texts and images for those tests in `tests/resources`.
+Language selection is done with `parse.lang` configuration property
 
 ## Tunning suggestions
 
@@ -90,6 +107,31 @@ Currently just a rudimentary algorithm has been developed.
 `INFO    [ pybrl2txt ] keypoint sizes [10 11]`  
 If values are not close to each other then blob detection needs tuning, e.g.: `[4, 10, 11]`.
 
+## Compiling liblouis20
+Some Linux distributions provide `python-louis` packages for some python versions but not others so it might have to be manually built.
 
+- Install `liblouis20` at OS level since tables are needed  
+e.g.:
+`zypper install liblouis liblouis-data`
 
+`sudo apt install liblouis liblouis-data`
+
+### Building python package
+Download [liblouis20 sources](https://liblouis.io/downloads/)
+
+Build commands. It worked out of the box in my case
+
+```bash
+cd /path/to/<liblouis source>
+automake
+./configure
+make
+
+# build python package for your preferred python version
+cd python
+python3.11 -m build .
+
+# install package
+pip3.11 install dist/louis-3.32.0-py3-none-any.whl
+```
 
