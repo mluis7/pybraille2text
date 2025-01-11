@@ -4,6 +4,7 @@ Status: Alpha/PoC
 
 <!-- TOC start (generated with https://github.com/derlin/bitdowntoc) -->
 
+- [General considerations](#general-considerations)
 - [Image considerations](#image-considerations)
 - [Braille considerations](#braille-considerations)
 - [Translation strategy](#translation-strategy)
@@ -11,10 +12,15 @@ Status: Alpha/PoC
 - [Find cells representing a character](#find-cells-representing-a-character)
 - [Translate cell coordinates to Braille character indexes](#translate-cell-coordinates-to-braille-character-indexes)
 - [Translate dot indexes to text](#translate-dot-indexes-to-text)
-- [Tunning suggestions](#tunning-suggestions)
+- [Tuning suggestions](#tuning-suggestions)
+- [Tests](#tests)
 - [Compiling liblouis20](#compiling-liblouis20)
 
 <!-- TOC end -->
+
+## General considerations
+The module is focused on parsing Braille cells to text from a set of keypoints returned by `opencv`. Dealing with blob detection in more complex cases is out of the scope for now.  
+Code comments might provide technical details for those interested.
 
 ## Image considerations
 Blob detection is very sensitive to image quality so currently it's tuned for the following specs:
@@ -25,8 +31,8 @@ Blob detection is very sensitive to image quality so currently it's tuned for th
 - If small dots are detected then the contrast should be increased.
 
 Tuning the detection parameters can be done by setting `cv2_cfg.detect.show_detect: true` in the configuration file.
-Detected dots in a line should all have the same color. Black dots without colored countour or small dots with color mean blob 
-detection errors that will lead to traslation errors. Some times a lot of them so it's important.
+Detected dots in a line should all have the same color. Black dots without colored contour mean they were not detected. Small dots with color mean blob area
+detection errors that will lead to translation errors. Some times a lot of them so it's important.
 
 ![X difference between points](/src/resources/line-detection.png)
 
@@ -43,7 +49,7 @@ In general terms
 Braille image --> blob coordinates --> Braille cell indexes --> Unicode Braille --> text
 ```
 
-- Get a sorted numpy array of blob coordinates from opencv detected keypoints.
+- Get a sorted `numpy` array of blob coordinates from `opencv` detected keypoints.
 - Group coordinates by line.
 - Find cells representing a character
 - Translate cell coordinates to Braille character indexes (1,2,3 for the first column, 4,5,6 for the second).
@@ -96,16 +102,27 @@ since it provides python bindings.
 The result is very promising for English language.  
 Spanish was tested but translation contained errors (~ 80% successful).
 See texts and images for those tests in `tests/resources`.
-Language selection is done with `parse.lang` configuration property
+Language selection is done with `parse.lang` configuration property.
 
-## Tunning suggestions
+## Tuning suggestions
 
 - Start with simple Braille images having more than one line.
 - If images are digitally generated with online tools, save also the text.
 - Have a different yaml configuration file for each image or type of images.
 - If you see too many errors then blob detection probably needs tuning. Check found blob areas  
 `INFO    [ pybrl2txt ] keypoint sizes [10 11]`  
-If values are not close to each other then blob detection needs tuning, e.g.: `[4, 10, 11]`.
+If values are not close to each other then `cv2_cfg.detect.min_area` property needs tuning, e.g.: `[4, 10, 11]`.
+
+## Tests
+A few simple tests have been added mostly for development control. Each one is supplied with the corresponding image, configuration file and plain text represented in the image. Run them as simple python scripts.
+The test in Spanish language gives a translation with errors but `liblouis` binaries also give the same errors in command line so it might be due to library issues. 
+**Note**: All test images were digitally generated 
+
+```
+test_all_abbreviations.py
+test_camel_case.py
+test_spanish.py
+```
 
 ## Compiling liblouis20
 Some Linux distributions provide `python-louis` packages for some python versions but not others so it might have to be manually built.

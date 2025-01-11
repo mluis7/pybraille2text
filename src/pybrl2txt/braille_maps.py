@@ -1,7 +1,7 @@
 
 __all__ = ['BLANK', 'cell_map', 'numbers', 'prefixes', 'abbr', 'symbols', 'BLANK', 'ACUTE' \
            'NUMBER', 'UPPER', 'ilc_pfx', 'abbr1', 'abbr2', 'abbr3']
-BLANK = (0,0,0,0,0,0)
+BLANK = (0,)
 
 ACUTE = 'ACUTE' #  ((4, 5), (3, 4))((1,),) -> á
 UPPER = 'UPPER'

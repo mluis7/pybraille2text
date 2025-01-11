@@ -35,6 +35,11 @@ class CellParams(object):
     ydot = 0
     normalized = True
     
+    def __repr__(self):
+        return f"CellParams: xdot: {self.xdot}, ydot: {self.ydot}, xsep: {self.xsep}, csize: {self.csize}"
+    def __str__(self):
+        return self.__repr__()
+    
 @dataclass
 class Page(Area):
     '''
@@ -42,6 +47,7 @@ class Page(Area):
     '''
     cell_params  = CellParams()
     lines = []
+    lang = 'en'
 
 @dataclass
 class Line(Area):
@@ -53,6 +59,7 @@ class Line(Area):
     ydot36 = 0
     # Useful for debugging
     line_num = -1
+    cell_count = 0
     # CellParams
     cell_params  = CellParams()
     

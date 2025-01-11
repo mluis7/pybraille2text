@@ -8,6 +8,7 @@ dynamic = ["version"]
 
 dependencies = [
   "opencv-python",
+  "unicodedata",
   "numpy",
   "pyyaml"
 ]
