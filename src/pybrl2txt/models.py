@@ -35,6 +35,11 @@ class CellParams(object):
     ydot = 0
     normalized = True
     
+    def __repr__(self):
+        return f"CellParams: xdot: {self.xdot}, xsep: {self.xsep}, csize: {self.csize}"
+    def __str__(self):
+        return self.__repr__()
+    
 @dataclass
 class Page(Area):
     '''

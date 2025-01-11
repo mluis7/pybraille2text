@@ -353,7 +353,7 @@ def cell_keypoints_to_braille_indexes(cell, line_params, idx):
         return (-1,), True
     
     if len(cell) == 0:
-        return (0,), False
+        return BLANK, False
     
     # convenience checks to place breakpoints for debugging.
     if idx == 0: #and line_params.ymax > 800:
@@ -433,7 +433,8 @@ def translate_line(line_coor, ln, page):
     # Calculated cell size for the line is greater than page calculated cell size.
     # It's probably an indicator of page irregularities or bad blob detections
     if line_params.cell_params.csize > page.cell_params.csize:
-        logger.warning(f"WARN. Line cell size changed: page csize: {page.cell_params.csize}, line csize {line_params.cell_params.csize}")
+        logger.warning(f"Line/Page params differ. Page : {page.cell_params}")
+        logger.warning(f"Line/Page params differ. Line : {line_params.cell_params}")
         #line_params.cell_params.csize = page.cell_params.csize
     
     text = ''
@@ -442,7 +443,8 @@ def translate_line(line_coor, ln, page):
     wrd_cells = []
     line_coor = line_coor[np.lexsort((line_coor[:, 1], line_coor[:, 0]))]
     line_diff = np.diff(line_coor, axis=0)
-    line_wrd_idx = line_coor[:-1][line_diff[:,0] > cp.csize + 1]
+    # FIXME: offset added to fix word split. 'else' -> 'el se'
+    line_wrd_idx = line_coor[:-1][line_diff[:,0] > cp.csize * 1.1]
     pwi = None
     # split line in words
     for wi in line_wrd_idx:
@@ -457,7 +459,7 @@ def translate_line(line_coor, ln, page):
     for i, wrdc in enumerate(wrd_cells):
         cs = wrdc[:,0].min()
         ce = cs + cp.xsep
-        # extend the limit1 pixel to cover rounding problems.
+        # FIXME extend the limit pixel to cover rounding problems.
         while ce < wrdc[:,0].max() + cp.csize + 1:
             cll = wrdc[(wrdc[:,0] >= cs) & (wrdc[:,0] < ce)]
             cs = ce
@@ -468,16 +470,13 @@ def translate_line(line_coor, ln, page):
         cells.append([])
         pass
         
-    # first cell with dot on the left, last cell dot on the right
-    # first cell with dot on the right, last cell dot on the right
-    # first cell with dot on the left, last cell dot on the left
+    # translate coordinates to Braille indexes
     idxs = []
     for idx, cell in enumerate(cells):
         if line_params.cell_params.normalized:
             brl_idx, is_cell_error = cell_keypoints_to_braille_indexes(cell, line_params, idx)
         else:
             brl_idx, is_cell_error = cell_to_braille_indexes_no_magic(cell, line_params, idx)
-        #brl_idx, is_cell_error = cell_keypoints_to_braille_indexes(cell, line_params, idx)
         idxs.append(brl_idx)
         error_count +=  1 if is_cell_error else 0
         
@@ -546,7 +545,6 @@ def parse_image_file(cfg_path, img_path):
     ln = -1
     total = 0
     total_errors = 0
-    total_blank = 0
     try:
         # map of keypoints coordinates to keypoints
         kp_map = { (round(kp.pt[0], round_to), round(kp.pt[1], round_to)): kp for kp in keypoints}
@@ -591,7 +589,7 @@ def parse_image_file(cfg_path, img_path):
     except Exception as e:
         logger.error(f"Critical error while parsing line {ln}: {e}", exc_info=logger.isEnabledFor(logging.DEBUG))
     
-    return text, total, total_blank, total_errors
+    return text, total, total_errors
 
 def main(args):
     logging.basicConfig(level=logging.DEBUG)
@@ -614,9 +612,9 @@ def main(args):
     
     img_path = f"{base_dir}/{image_path}"
     
-    text, total, total_blank, total_errors = parse_image_file(cfg_path, img_path)
+    text, total, total_errors = parse_image_file(cfg_path, img_path)
 
-    logger.info(f"Total words: {total} (spaces: {total_blank}), total_errors: {total_errors}")
+    logger.info(f"Total words: {total}, total_errors: {total_errors}")
 
     print(f'\n{"-" * 80}')
     print(text)
