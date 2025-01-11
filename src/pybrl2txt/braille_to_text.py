@@ -596,15 +596,20 @@ def parse_image_file(cfg_path, img_path):
 def main(args):
     logging.basicConfig(level=logging.DEBUG)
     
-    base_dir = '../../tests/resources'
-    cfg_path = '../resources/abbreviations.yml'
-    image_path = "abbreviations.png"
+    base_dir = ''
+    cfg_path = ''
+    image_path = ""
     #image_path = "camel-case.png"
 
     if len(args) >= 4:
         base_dir = args[1]
         cfg_path = args[2]
         image_path = args[3]
+    else:
+        base_dir = '../../tests/resources'
+        cfg_path = '../resources/abbreviations.yml'
+        #    image_path = "abbreviations.png"
+        image_path = "camel-case.png"
     
     
     img_path = f"{base_dir}/{image_path}"
