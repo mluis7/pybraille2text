@@ -19,11 +19,7 @@ logger = logging.getLogger("pybrl2txt")
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(levelname)-7s [%(name)s] %(message)s" ,
-#    format="[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
-#    datefmt="%d/%b/%Y %H:%M:%S",
     stream=sys.stdout)
-#abbr = { tuple([t for t in v]) : k for k,v in rev_abbr.items()}
-#abbr = dict(map(reversed, rev_abbr.items()))
 uni_prefix = 'BRAILLE PATTERN DOTS-'
 
 def get_build_detector_params(cv2_params):
