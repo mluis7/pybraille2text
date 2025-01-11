@@ -211,6 +211,8 @@ def cell_to_braille_indexes_no_magic(cell, line_params, idx):
     * .  . .  . .  . * . .  . .
     . .  * .  . .  . . . *  . .
     . .  . .  * .  . . . .  . *
+    
+    Not currently used but logic development deserves keeping it.
     """
     is_cell_error = False
     cause = 'UNKNOWN'
@@ -391,11 +393,17 @@ def cell_keypoints_to_braille_indexes(cell, line_params, idx):
     if is_cell_error or dup_cell_error:
         cause = 'duplicate ' if dup_cell_error else ''
         logger.error(f"Line: {line_params.line_num}/{idx} - {cause}index translation error on\ncell: {cell}\nnorm: {celln} -> ids: {cell_idxs}")
+        
+        # try to fix broken cell
+        cell_idxs, is_cell_error = cell_to_braille_indexes_no_magic(cell, line_params, idx)
 
     #cell_idxs, is_cell_error = cell_to_braille_indexes_no_magic(cell, line_params, cell_start, idx)
     return tuple(sorted(cell_idxs)), is_cell_error or dup_cell_error
 
 def get_cell_start_end(page, line_params, idx):
+    """Calculate cell start x value given the line/page CellParameters
+    and the cell index within the word.
+    """
     cell_start = line_params.xmin
 
     if idx == 0 and page is not None and cell_start > page.xmin:
@@ -412,6 +420,8 @@ def get_cell_start_end(page, line_params, idx):
 def translate_line(line_coor, ln, page):
     """Return array of cells in a line with BLANK inserted.
     Area parameters are recalculated with specific line values.
+    
+    Line coordinates are split into words and then words into cells. 
     """
     line_params = Line()
     line_params.line_num = ln
@@ -429,17 +439,19 @@ def translate_line(line_coor, ln, page):
     # Calculated cell size for the line is greater than page calculated cell size.
     # It's probably an indicator of page irregularities or bad blob detections
     if line_params.cell_params.csize > page.cell_params.csize:
-        logger.warning(f"Line/Page params differ. Page : {page.cell_params}")
-        logger.warning(f"Line/Page params differ. Line : {line_params.cell_params}")
+        logger.warning(f"Line {ln}/Page params differ. Page : {page.cell_params}")
+        logger.warning(f"Line {ln}/Page params differ. Line : {line_params.cell_params}")
         #line_params.cell_params.csize = page.cell_params.csize
     
     text = ''
     error_count = 0
     cells = []
     wrd_cells = []
+    # IMPORTANT: line coordinates are sorted by y then x to get cell ordered coordinates 
     line_coor = line_coor[np.lexsort((line_coor[:, 1], line_coor[:, 0]))]
     line_diff = np.diff(line_coor, axis=0)
     # FIXME: offset added to fix word split. 'else' -> 'el se'
+    # line coordinates differences greater than cell size. Represent end of a word
     line_wrd_idx = line_coor[:-1][line_diff[:,0] > cp.csize * 1.1]
     pwi = None
     # split line in words
@@ -447,12 +459,15 @@ def translate_line(line_coor, ln, page):
         if pwi is None:
             wrd_cells.append(line_coor[line_coor[:,0] <= wi[0]])
         else:
+            # array of coordinates between previous and current word delimiter indexes.
             wrd_cells.append(line_coor[(line_coor[:,0] > pwi[0]) & (line_coor[:,0] <= wi[0])])
         pwi = wi
     wrd_cells.append(line_coor[line_coor[:,0] > pwi[0]])
     
     #split words in cells
     for i, wrdc in enumerate(wrd_cells):
+        # Expected cell start and end
+        # WARNING: inaccuracies will impact translation- sensitive value 
         cs = wrdc[:,0].min()
         ce = cs + cp.xsep
         # FIXME extend the limit pixel to cover rounding problems.
@@ -466,7 +481,7 @@ def translate_line(line_coor, ln, page):
         cells.append([])
         pass
         
-    # translate coordinates to Braille indexes
+    # translate cell coordinates to Braille indexes
     idxs = []
     for idx, cell in enumerate(cells):
         if line_params.cell_params.normalized:
