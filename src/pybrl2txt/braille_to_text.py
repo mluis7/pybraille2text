@@ -113,10 +113,7 @@ def get_area_parameters(coords, area_obj: Area):
     # x,y differences between contiguous dots. Negative values mean second/third rows in a cell and the start of a line.
     # e.g.: previous point p0=(520,69), current point =(69, 140). xydiff = (-451, 71).
     # xdiff is negative, ydiff is greater than vertical cell size --> current dot is starting a line.
-    
     xydiff = np.diff(coords, axis=0)
-    
-    line_coor = coords[np.lexsort((coords[:, 1], coords[:, 0]))]
     
     xcoords = coords[coords[:,0] > 1][:,0]
     ycoords = coords[coords[:,1] > 1][:,1]
@@ -321,7 +318,9 @@ def cell_to_braille_indexes_no_magic(cell, line_params, idx):
     return cell_idxs, is_cell_error
 
 def cell_keypoints_to_braille_indexes(cell, line_params, idx):
-    """Cell is normalized using cell and line parameters: ``xmin, ymin, xdot and ydot``.
+    """Cell must contain the correct points, if not, it must be fixed in the previous step.
+    
+    Cell is normalized using cell and line parameters: ``xmin, ymin, xdot and ydot``.
     First, substract xmin and ymin from corresponding cell coordinates. Then, divide
     those values by x dot and y dot distances.
     e.g.:
@@ -335,50 +334,53 @@ def cell_keypoints_to_braille_indexes(cell, line_params, idx):
      [202.  65.]]
      
      Magic! normalized values should match a key on ref_cell map!!!
-     Normalized values should return 0 or 1 but 1.5 may be returned due to rounding issues
-     so (1, 0) and (2, 0) both map to index 4.
+     Normalized values should return 0 or 1 for x and 0, 1, 2 for y.
      
      [[0. 0.]
       [0. 1.]
       [0. 2.]
       [1. 2.]]
     
-    **cell_to_braille_indexes_no_magic** method can be used instead if too many errors occur.
+    **cell_to_braille_indexes_no_magic** method can be tried instead if too many errors occur.
     """
     ref_cell = {(0,0): 1, (1,0): 4, # (2,0): 4,
                 (0,1): 2, (1,1): 5, # (2,1): 5,
                 (0,2): 3, (1,2): 6, # (2,2): 6,
                 }
-    ref_cell2 = {(1,0): 1, (2,0): 4,
-                (1,1): 2, (2,1): 5,
-                (1,2): 3, (2,2): 6,
-                }
-    if idx == 0: #and line_params.ymax > 800:
-        pass
-    
-    if line_params.line_num == 0 and idx == 13:
-        pass
-    
+
     if len(cell) > 6:
         logger.error(f"ERROR. Cell has more than 6 dots")
         return (-1,), True
     
     if len(cell) == 0:
-        #logger.error(f"ERROR. Cell is empty")
         return (0,), False
+    
+    # convenience checks to place breakpoints for debugging.
+    if idx == 0: #and line_params.ymax > 800:
+        pass
+    if line_params.line_num == 0 and idx in [3, 6, 11]:
+        pass
     
     cell_start, _ = get_cell_start_end(None, line_params, idx)
     
-    # cell normalization
     celln = cell.copy()
     xcu = np.unique(celln[:, 0])
-    ycu = np.unique(celln[:, 1])
-    if len(xcu) > 0:
-        cxmin =celln[:,0].min()
-        if len(xcu) == 2:
-            cell_start = cxmin
-        if cell_start < cxmin - line_params.cell_params.xdot:
-            cell_start = cxmin - line_params.cell_params.xdot
+    cxmin = celln[:,0].min()
+    #
+    # Cell start fixing rules
+    #    Attempt to handle: blob detection from images of unknown source, 
+    #    lines of different length, irregular or to much white space between cells,
+    #    unknown Braille grade, etc.
+    #
+    # - It's not the first cell and has 2 unique x coordinates so cell starts at the min of them
+    # - Calculated cell start is less than cell min x for more than a cell size.
+    if (len(xcu) == 2 and idx > 0) or (cxmin - cell_start) > line_params.cell_params.csize:
+        cell_start = cxmin
+    # - Cell cannot start after x min
+    if cell_start > cxmin:
+        cell_start = cxmin
+    
+    # cell normalization
     celln[:,0] -= cell_start 
     celln[:,1] -= line_params.ymin
     celln = celln[np.lexsort((celln[:, 1], celln[:, 0]))]
@@ -397,44 +399,12 @@ def cell_keypoints_to_braille_indexes(cell, line_params, idx):
     #cell_idxs, is_cell_error = cell_to_braille_indexes_no_magic(cell, line_params, cell_start, idx)
     return tuple(sorted(cell_idxs)), is_cell_error or dup_cell_error
 
-#def translate_cell(cell, line_params, idx):
-#    """Translate cell coordinates to braille cell indexes."""
-#    
-#    if cell is BLANK:
-#        #print(f"SPACE: {idx}, {BLANK}")
-#        return BLANK, 0
-#    if line_params.cell_params.normalized:
-#        brl_idx, is_cell_error = cell_keypoints_to_braille_indexes(cell, line_params, idx)
-#    else:
-#        brl_idx, is_cell_error = cell_to_braille_indexes_no_magic(cell, line_params, idx)
-#    
-#    return brl_idx, is_cell_error
-#
-#def translate_cells(cells, line_params):
-#    """Translate list of coordinates tuples to list of Braille indexes tuples by word""" 
-#    word_tuples = []
-#    word_tpl = []
-#    total_trn_err = 0
-#    for idx, cell in enumerate(cells):
-#        #print(cell)
-#        tcell, cell_err_count = translate_cell(cell, line_params, idx)
-#        total_trn_err += cell_err_count
-#    
-#        if tcell is not BLANK:
-#            word_tpl.append(tcell)
-#        elif len(word_tpl) > 0:
-#            word_tpl.append(BLANK)
-#            word_tuples.append(tuple(word_tpl))
-#            word_tpl = []
-#    if total_trn_err > 0:
-#        logger.error(f"Line {line_params.line_num} cell translation errors: {total_trn_err}")
-#    return word_tuples
-
 def get_cell_start_end(page, line_params, idx):
     cell_start = line_params.xmin
 
     if idx == 0 and page is not None and cell_start > page.xmin:
-        #line_params.xmin = page.xmin
+        # WARNING: sensitive value
+        line_params.xmin = page.xmin
         cell_start = line_params.xmin
     if idx > 0:
         cell_start += (line_params.cell_params.csize) * idx
@@ -452,22 +422,51 @@ def translate_line(line_coor, ln, page):
     line_params = get_area_parameters(line_coor, line_params)[0]
     cp = line_params.cell_params
     cp.normalized = page.cell_params.normalized
+    # Line min x coordinate is greater than page one so the 
+    # line probably starts with dots in the second column (4,5,6)
+    # or with spaces.
+    if line_params.xmin > page.xmin:
+            line_params.xmin = page.xmin
+    # Line max x coordinate is less that page one so the line is shorter.
+    if line_params.xmax < page.xmax:
+            line_params.xmax = page.xmax
+    # Calculated cell size for the line is greater than page calculated cell size.
+    # It's probably an indicator of page irregularities or bad blob detections
+    if line_params.cell_params.csize > page.cell_params.csize:
+        logger.warning(f"WARN. Line cell size changed: page csize: {page.cell_params.csize}, line csize {line_params.cell_params.csize}")
+        #line_params.cell_params.csize = page.cell_params.csize
     
     text = ''
     error_count = 0
     cells = []
+    wrd_cells = []
     line_coor = line_coor[np.lexsort((line_coor[:, 1], line_coor[:, 0]))]
+    line_diff = np.diff(line_coor, axis=0)
+    line_wrd_idx = line_coor[:-1][line_diff[:,0] > cp.csize + 1]
+    pwi = None
+    # split line in words
+    for wi in line_wrd_idx:
+        if pwi is None:
+            wrd_cells.append(line_coor[line_coor[:,0] <= wi[0]])
+        else:
+            wrd_cells.append(line_coor[(line_coor[:,0] > pwi[0]) & (line_coor[:,0] <= wi[0])])
+        pwi = wi
+    wrd_cells.append(line_coor[line_coor[:,0] > pwi[0]])
     
-    for i in range(line_params.cell_count):
-        cstart, cend = get_cell_start_end(page, line_params, i)
-        
-#        if i > 0:
-#            xcu = np.unique(cells[-1][:, 0])
-#            if len(xcu) >= 2:
-#                cstart = cells[-1][:,0].max()
-#                cend = cstart + cp.csize
-            
-        cells.append(line_coor[(line_coor[:,0] >= cstart) & (line_coor[:,0] < cend)])
+    #split words in cells
+    for i, wrdc in enumerate(wrd_cells):
+        cs = wrdc[:,0].min()
+        ce = cs + cp.xsep
+        # extend the limit1 pixel to cover rounding problems.
+        while ce < wrdc[:,0].max() + cp.csize + 1:
+            cll = wrdc[(wrdc[:,0] >= cs) & (wrdc[:,0] < ce)]
+            cs = ce
+            ce = cs + cp.csize
+            if len(cll) > 0:
+                cells.append(cll)
+        # add "space" between words
+        cells.append([])
+        pass
         
     # first cell with dot on the left, last cell dot on the right
     # first cell with dot on the right, last cell dot on the right
@@ -484,63 +483,6 @@ def translate_line(line_coor, ln, page):
         
     text += call_louis(idxs, ln, page.lang)
     return text, line_params, error_count
-    
-def translate_line_v1(line_coor, ln, page):
-    """Return array of cells in a line with BLANK inserted.
-    Area parameters are recalculated with specific line values.
-    """
-    line_params = Line()
-    line_params.line_num = ln
-    line_params = get_area_parameters(line_coor, line_params)[0]
-    cp = line_params.cell_params
-    cp.normalized = page.cell_params.normalized
-    
-    # Line min x coordinate is greater than page one so the 
-    # line probably starts with dots in the second column (4,5,6)
-    # or with spaces.
-    if line_params.xmin > page.xmin:
-            line_params.xmin = page.xmin
-    # Line max x coordinate is less that page one so the line is shorter.
-    if line_params.xmax < page.xmax:
-            line_params.xmax = page.xmax
-    # Calculated cell size for the line is greater than page calculated cell size.
-    # It's probably an indicator of page irregularities or bad blob detections
-    if line_params.cell_params.csize > page.cell_params.csize:
-        logger.warning(f"WARN. Line cell size changed: page csize: {page.cell_params.csize}, line csize {line_params.cell_params.csize}")
-        line_params.cell_params.csize = page.cell_params.csize
-    
-    cell_count_expected = (line_params.xmax - line_params.xmin) / line_params.cell_params.csize
-    logger.debug(f"Line: {ln}, X params: xcell {cp.xdot :.0f}, xmin {line_params.xmin:.0f}, csize {cp.csize:.0f}, xmax {line_params.xmax:.0f}, max cells: {cell_count_expected:2f}")
-    logger.debug(f"Line: {ln}, Y params: ycell {cp.ydot:.0f}, ymin {line_params.ymin:.0f}")
-    
-    cells = []
-    blank_count = 0
-    
-    idx = 0
-    cell_start = get_cell_start_end(page, line_params, idx)
-    if idx == 0 and cell_start > page.xmin:
-        line_params.xmin = page.xmin
-        cell_start = line_params.xmin
-    
-    cell_end = line_params.xmin + line_params.cell_params.csize
-    line_end = 0
-    
-    while line_end <= line_params.xmax:
-        cell = line_coor[(line_coor[:, 0] >= cell_start) & (line_coor[:, 0] < cell_end)]
-        # FIXME: do not add blank at start of a line
-        if len(cell) == 0:
-            cells.append(BLANK)
-            line_end += line_params.cell_params.csize
-            blank_count += 1
-        else:
-            cells.append(cell)
-            line_end = cells[-1][0][0]
-        idx += 1
-        cell_start = get_cell_start_end(None, line_params, idx)
-        cell_end += line_params.cell_params.csize
-    
-    logger.debug(f"Line {ln}, Found cells: {len(cells)}, Spaces: {blank_count}, cell width: {line_params.cell_params.csize}, pt count: {len(line_coor)}")
-    return cells, line_params, blank_count
 
 def get_replacement_for_unknown_indexes():
     """Return a inverted question mark ¿ for not translated indexes"""
@@ -555,6 +497,8 @@ def call_louis(word_tuples, line_num, lang='en'):
     """Convert index tuples to unicode characters for the whole line,
     then supply that braille unicode text to python-louis to get translated text.
     
+    Returns '¿' for each index if word contains at least one -1 index.
+    
     For a custom path to tables set LOUIS_TABLEPATH
     """
     
@@ -563,51 +507,23 @@ def call_louis(word_tuples, line_num, lang='en'):
     logger.debug(f"Locale table: {languages[lang]}")
     braille_uni_str = ''
     for w, wrd in enumerate(word_tuples):
-        if wrd == (0,):
-            braille_uni_str += ' '
+        if -1 in wrd:
+            braille_uni_str += get_replacement_for_unknown_indexes() * len(wrd)
             continue
         res = ''.join(sorted([str(idx) for idx in wrd]))
         
         try:
             uni_name = f'{uni_prefix}{res}'
+            if wrd == (0,):
+                uni_name = 'BRAILLE PATTERN BLANK'
             braille_uni_str += uc.lookup(uni_name)
+            #logger.debug(f"Line {line_num}: cell: {wrd}, unicode : {uni_name}", exc_info=False)
         except Exception as e:
             logger.debug(f"Line {line_num}: Index to unicode conversion.: {e}, cell: {wrd}", exc_info=False)
             # Add an inverted question mark (¿)for not found unicode characters.
             braille_uni_str += get_replacement_for_unknown_indexes()
+    #logger.debug(f"Line {line_num}: Braille unicode text: {braille_uni_str}")
     lou_transl = louis.backTranslate([languages[lang]], braille_uni_str)
-    return lou_transl[0]
-
-def call_louis_v1(word_tuples, line_num, lang='en'):
-    """Convert index tuples to unicode characters for the whole line,
-    then supply that braille unicode text to python-louis to get translated text.
-    
-    For a custom path to tables set LOUIS_TABLEPATH
-    """
-    
-    #TODO: build dict of available languages dynamically.
-    languajes = {'es': 'es-g2.ctb', 'en': 'en-ueb-g2.ctb', 'fr': 'fr-bfu-g2.ctb'}
-    braille_uni_str = ''
-    for w, wrd in enumerate(word_tuples):
-        res_parts = []
-        for cell in wrd:
-            if cell is BLANK:
-                if w < len(word_tuples) - 1:
-                    braille_uni_str += ' '
-                continue
-            res = ''.join(sorted([str(idx) for idx in cell]))
-            if res == '-1':
-                braille_uni_str += get_replacement_for_unknown_indexes()
-                continue
-            res_parts.append(res)
-            try:
-                uni_name = f'{uni_prefix}{res}'
-                braille_uni_str += uc.lookup(uni_name)
-            except Exception as e:
-                logger.debug(f"Line {line_num}: Index to unicode conversion.: {e}, cell: {cell}", exc_info=False)
-                # Add an inverted question mark (¿)for not found unicode characters.
-                braille_uni_str += get_replacement_for_unknown_indexes()
-    lou_transl = louis.backTranslate(['unicode.dis', languajes[lang]], braille_uni_str)
     return lou_transl[0]
 
 def parse_image_file(cfg_path, img_path):
@@ -677,18 +593,19 @@ def parse_image_file(cfg_path, img_path):
     
     return text, total, total_blank, total_errors
 
-def main():
+def main(args):
     logging.basicConfig(level=logging.DEBUG)
     
     base_dir = '../../tests/resources'
     cfg_path = '../resources/abbreviations.yml'
     image_path = "abbreviations.png"
-    #image_path = "alfonsina-es.png"
-    image_path = "camel-case.png"
+    #image_path = "camel-case.png"
+
+    if len(args) >= 4:
+        base_dir = args[1]
+        cfg_path = args[2]
+        image_path = args[3]
     
-#    base_dir = '/home/lmc/projects/eclipse-workspace/SOPython/lmc/braille_to_text_poc'
-#    cfg_path = '../resources/brl.yml'
-#    image_path = 'braille-poem2.png'
     
     img_path = f"{base_dir}/{image_path}"
     
@@ -699,5 +616,5 @@ def main():
     print(f'\n{"-" * 80}')
     print(text)
 if __name__ == '__main__':
-    main()
+    main(sys.argv)
     
