@@ -42,6 +42,7 @@ class Page(Area):
     '''
     cell_params  = CellParams()
     lines = []
+    lang = 'en'
 
 @dataclass
 class Line(Area):
@@ -53,6 +54,7 @@ class Line(Area):
     ydot36 = 0
     # Useful for debugging
     line_num = -1
+    cell_count = 0
     # CellParams
     cell_params  = CellParams()
     
