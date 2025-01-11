@@ -6,7 +6,7 @@ cfg:
     logging_level: debug
 
 parse:
-    lang: en
+    lang: engbg2
     round_to: 0
     offset: 1.15
     #xmin: 77

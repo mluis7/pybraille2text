@@ -513,7 +513,7 @@ def call_louis(word_tuples, line_num, lang='en'):
     """
     
     #TODO: build dict of available languages dynamically.
-    languages = {'es': 'es-g2.ctb', 'en': 'en-ueb-g2.ctb', 'fr': 'fr-bfu-g2.ctb'}
+    languages = {'es': 'es-g2.ctb', 'en': 'en-ueb-g2.ctb', 'engbg2': 'en-GB-g2.ctb', 'fr': 'fr-bfu-g2.ctb'}
     logger.debug(f"Locale table: {languages[lang]}")
     braille_uni_str = ''
     for w, wrd in enumerate(word_tuples):

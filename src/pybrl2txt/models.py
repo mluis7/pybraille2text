@@ -36,7 +36,7 @@ class CellParams(object):
     normalized = True
     
     def __repr__(self):
-        return f"CellParams: xdot: {self.xdot}, xsep: {self.xsep}, csize: {self.csize}"
+        return f"CellParams: xdot: {self.xdot}, ydot: {self.ydot}, xsep: {self.xsep}, csize: {self.csize}"
     def __str__(self):
         return self.__repr__()
     
