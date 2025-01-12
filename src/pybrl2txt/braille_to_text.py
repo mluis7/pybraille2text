@@ -47,6 +47,15 @@ def get_build_detector_params(cv2_params):
     #params.minDistBetweenBlobs = 12
     return params
 
+def get_keypoints(img_path, cv2_params):
+    image = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+    #ret,image = cv2.threshold(image,64,255,cv2.THRESH_BINARY)
+    params = get_build_detector_params(cv2_params)
+    # Create a detector with the parameters
+    detector = cv2.SimpleBlobDetector_create(params) # Detect blobs
+    keypoints = detector.detect(image)
+    return keypoints, image
+
 def show_detection(image, detected_lines, xcell, csize, xmin, ymax):
     """Help to visually debug if lines are correctly detected since dots would be colored by line.
     Black dots represent not correctly detected cells/lines.
@@ -133,7 +142,7 @@ def get_area_parameters(coords, area_obj: Area):
     yuniq_from_diff = np.unique(np.round(xydiff[(xydiff[:,1] > 1)][:,1]))
     ycell = yuniq_from_diff.min()
     # x separation between cells
-    xsep = np.unique(xydiff[(xydiff[:,0] > xcell)][:,0]).min()
+    xsep = np.unique(xydiff[(xydiff[:,0] > xcell * 1.3)][:,0]).min()
     
     area_obj.cell_params.xdot = xcell
     area_obj.cell_params.ydot = ycell
@@ -144,6 +153,7 @@ def get_area_parameters(coords, area_obj: Area):
     if isinstance(area_obj, Line):
         area_obj.cell_count = round((area_obj.xmax + area_obj.cell_params.xdot - area_obj.xmin)/area_obj.cell_params.csize) + 1
         yuniq = np.unique(np.round(ycoords[(ycoords > 1)]))
+        # used by cell_to_braille_indexes_no_magic method
         area_obj.ydot14 = yuniq[0]
         if yuniq.size > 1:
             area_obj.ydot25 = yuniq[1]
@@ -153,15 +163,6 @@ def get_area_parameters(coords, area_obj: Area):
     
     #print(f"xuniq_from_diff: {xuniq_from_diff}\nyuniq: {yuniq_from_diff}")
     return area_obj, xydiff
-
-def get_keypoints(img_path, cv2_params):
-    image = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-    params = get_build_detector_params(cv2_params)
-    # Create a detector with the parameters
-    detector = cv2.SimpleBlobDetector_create(params) # Detect blobs
-    keypoints = detector.detect(image)
-    return keypoints, image
-
 
 def cell_to_braille_indexes_no_magic(cell, line_params, idx):
     """Return a sorted tuple representing dot indexes in the cell.
@@ -385,8 +386,13 @@ def cell_keypoints_to_braille_indexes(cell, line_params, idx):
     celln[:,0] = np.round(np.divide(celln[:,0], line_params.cell_params.xdot))
     celln[:,1] = np.round(np.divide(celln[:,1], line_params.cell_params.ydot))
 
+    # Normalization/rounding issues give x max = 2
+    # [[1 0][2 2]] fixed to [[0 0][1 2]]
+    if celln[:,0].max() == 2: # celln[:,0].min() == 1 and
+        celln[:,0] -= 1
+    
     # get dot indexes or -1 if not found
-    cell_idxs = [ref_cell.get((x[0],x[1]), -1)  for x in celln]
+    cell_idxs = np.array([ref_cell.get((x[0],x[1]), -1)  for x in celln])
     
     is_cell_error = -1 in cell_idxs
     dup_cell_error = len(cell_idxs) > len(set([x for x in cell_idxs]))
@@ -457,10 +463,11 @@ def translate_line(line_coor, ln, page):
     # split line in words
     for wi in line_wrd_idx:
         if pwi is None:
-            wrd_cells.append(line_coor[line_coor[:,0] <= wi[0]])
+            ccoor = line_coor[line_coor[:, 0] <= wi[0]]
         else:
             # array of coordinates between previous and current word delimiter indexes.
-            wrd_cells.append(line_coor[(line_coor[:,0] > pwi[0]) & (line_coor[:,0] <= wi[0])])
+            ccoor = line_coor[(line_coor[:,0] > pwi[0]) & (line_coor[:,0] <= wi[0])]
+        wrd_cells.append(ccoor)
         pwi = wi
     wrd_cells.append(line_coor[line_coor[:,0] > pwi[0]])
     
@@ -473,10 +480,13 @@ def translate_line(line_coor, ln, page):
         # FIXME extend the limit pixel to cover rounding problems.
         while ce < wrdc[:,0].max() + cp.csize + 1:
             cll = wrdc[(wrdc[:,0] >= cs) & (wrdc[:,0] < ce)]
+            if len(cll) > 0:
+                if cll[:,0].max() - cll[:,0].min() > cp.xsep:
+                    logger.warning(f"Line: {ln}. Cell in word {i} contains more keypoints than it should. (max - min) > xsep: {cll[:,0].max()} {cll[:,0].min()}. Fixing...")
+                    cll = wrdc[(wrdc[:,0] >= cs) & (wrdc[:,0] < cs + cp.xsep * 0.8)]
+                cells.append(cll)
             cs = ce
             ce = cs + cp.csize
-            if len(cll) > 0:
-                cells.append(cll)
         # add "space" between words
         cells.append([])
         pass
@@ -549,7 +559,7 @@ def parse_image_file(cfg_path, img_path):
         if config.get('cfg') is not None:
             logging_level = logging.getLevelName(config.get('cfg').get('logging_level', 'INFO').upper())
             logger.setLevel(logging_level)
-    logger.info(f"Starting '{lang}' Grade {grade} braille to text translation of {img_path}")
+    logger.info(f"Starting '{lang}' Grade {grade} braille to text translation of {img_path.split('/')[-1]}")
     keypoints, image = get_keypoints(img_path, config)
     
     text = ''
@@ -576,7 +586,7 @@ def parse_image_file(cfg_path, img_path):
             cp.normalized = normalized
         if dot_min_sep is not None:
             cp.dot_min_sep = dot_min_sep
-        if page.xmax / cp.csize > 40:
+        if (page.xmax - page.xmin)/ cp.csize > 40:
             logger.warning("More than 40 cells per line could be found exceeding the recommended 40.")
         page.lang = lang
         logger.info(f"Detected blobs: {len(blob_coords)}, max cells per line: {(page.xmax - page.xmin)/cp.csize:.0f}")

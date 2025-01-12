@@ -64,7 +64,7 @@ class Line(Area):
     cell_params  = CellParams()
     
     def __repr__(self):
-        return f"Line: {self.line_num}, ydot14: {self.ydot14}, ydot25: {self.ydot25}, ydot36: {self.ydot36}"
+        return f"Line: {self.line_num}, xmin/xmax: {self.xmin}/{self.xmax}, ymin/ymax: {self.ymin}/{self.ymax}, csize: {self.cell_params.csize}"
     def __str__(self):
         return self.__repr__()
 
