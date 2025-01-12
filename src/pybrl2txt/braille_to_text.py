@@ -213,7 +213,6 @@ def cell_to_braille_indexes_no_magic(cell, line_params, idx):
     . .  * .  . .  . . . *  . .
     . .  . .  * .  . . . .  . *
     
-    Not currently used but logic development deserves keeping it.
     """
     is_cell_error = False
     cause = 'UNKNOWN'
