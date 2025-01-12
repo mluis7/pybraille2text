@@ -85,7 +85,6 @@ def group_by_lines(kp_map, blob_coords, xydiff, page_params):
     ycell = page_params.cell_params.ydot
     lines_coord = []
     detected_lines = [[kp_map[blob_coords[0][0], blob_coords[0][1]]]]
-    #print(f"new line {'0':>2} at: {int(blob_coords[0][0])},{int(blob_coords[0][1])}")
     # split coordinates by lines
     line_cnt = 1
     for i, d in enumerate(xydiff):
@@ -93,8 +92,7 @@ def group_by_lines(kp_map, blob_coords, xydiff, page_params):
         if curr_pt[0] >= 714 and curr_pt[1] >= 820 and curr_pt[1] < 851:
             pass
         current_keypoint = kp_map[curr_pt[0], curr_pt[1]]
-        if (d[0] < 0 and d[1] >= ycell * 2.5) :# or (curr_pt[0] < prev_pt[0] and curr_pt[1] > prev_pt[1]):
-            #print(f"new line {line_cnt:>2} at: {curr_pt}, curr xdiff: {np.round(d)}, {page_params.xmax * -0.3:.0f}, previous: {blob_coords[i]}")
+        if (d[0] < 0 and d[1] >= ycell * 2.5) :
             detected_lines.append([current_keypoint])
             line_cnt += 1
         else:
@@ -142,6 +140,7 @@ def get_area_parameters(coords, area_obj: Area):
     yuniq_from_diff = np.unique(np.round(xydiff[(xydiff[:,1] > 1)][:,1]))
     ycell = yuniq_from_diff.min()
     # x separation between cells
+    # WARNING: rounding issues compensation - sensitive value
     xsep = np.unique(xydiff[(xydiff[:,0] > xcell * 1.3)][:,0]).min()
     
     area_obj.cell_params.xdot = xcell
@@ -161,12 +160,10 @@ def get_area_parameters(coords, area_obj: Area):
             area_obj.ydot36 = yuniq[2]
         logger.debug(f"{area_obj}")
     
-    #print(f"xuniq_from_diff: {xuniq_from_diff}\nyuniq: {yuniq_from_diff}")
     return area_obj, xydiff
 
 def cell_to_braille_indexes_no_magic(cell, line_params, idx):
     """Return a sorted tuple representing dot indexes in the cell.
-    The tuple should map to a text character in a braille_maps dict.
     The index detection logic could probably be simplified/merged but 
     keeping it verbose helps debugging a lot.
     
@@ -385,7 +382,7 @@ def cell_keypoints_to_braille_indexes(cell, line_params, idx):
     celln[:,0] = np.round(np.divide(celln[:,0], line_params.cell_params.xdot))
     celln[:,1] = np.round(np.divide(celln[:,1], line_params.cell_params.ydot))
 
-    # Normalization/rounding issues give x max = 2
+    # WARNING: Normalization/rounding issues give x max = 2
     # [[1 0][2 2]] fixed to [[0 0][1 2]]
     if celln[:,0].max() == 2: # celln[:,0].min() == 1 and
         celln[:,0] -= 1
@@ -402,7 +399,6 @@ def cell_keypoints_to_braille_indexes(cell, line_params, idx):
         # try to fix broken cell
         cell_idxs, is_cell_error = cell_to_braille_indexes_no_magic(cell, line_params, idx)
 
-    #cell_idxs, is_cell_error = cell_to_braille_indexes_no_magic(cell, line_params, cell_start, idx)
     return tuple(sorted(cell_idxs)), is_cell_error or dup_cell_error
 
 def get_cell_start_end(page, line_params, idx):
@@ -468,7 +464,9 @@ def translate_line(line_coor, ln, page):
             ccoor = line_coor[(line_coor[:,0] > pwi[0]) & (line_coor[:,0] <= wi[0])]
         wrd_cells.append(ccoor)
         pwi = wi
-    wrd_cells.append(line_coor[line_coor[:,0] > pwi[0]])
+    if pwi is not None:
+        # append remaining coordinates if any
+        wrd_cells.append(line_coor[line_coor[:,0] > pwi[0]])
     
     #split words in cells
     for i, wrdc in enumerate(wrd_cells):
