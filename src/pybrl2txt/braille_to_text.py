@@ -59,7 +59,7 @@ def get_keypoints(img_path, cv2_params):
 def show_detection(image, detected_lines, xcell, csize, xmin, ymax):
     """Help to visually debug if lines are correctly detected since dots would be colored by line.
     Black dots represent not correctly detected cells/lines.
-    Color will repeat every for lines."""
+    Color will repeat every four lines."""
     
     colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (178,102,255)]
     while len(colors) < len(detected_lines):
@@ -107,7 +107,7 @@ def group_by_lines(kp_map, blob_coords, xydiff, page_params):
     
     for i,d in enumerate(detected_lines):
         if len(d) != len(lines_coord[i]):
-            logger.error("ERROR on group by")
+            logger.error(f"ERROR on group by. Keypoint line length {len(d)} defers from coordinates line length. {len(lines_coord[i])}")
     return detected_lines, lines_coord
 
 def get_area_parameters(coords, area_obj: Area):
