@@ -20,14 +20,15 @@ class CellParams(object):
     xdot: x distance between cell dots
     ydot: y distance between cell dots
     xsep: x separation between cells
-    csize: total cell x size.
+    csize: total cell width (xdot + xsep).
     See: get_area_parameters() on how they are calculated.
     
     |<-- csize  -->|
-    |<xdot>|
+    |<xdot>|<xsep >|
     *      *        *      * -
     *      *        *      * - ydot
     *      *        *      *
+    
     """
     xdot = 0
     xsep = 0

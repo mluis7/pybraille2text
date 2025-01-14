@@ -1,10 +1,27 @@
 '''
+Braille to text translation module
+
+Main steps
+
+     Braille image --> blob coordinates --> Braille cell indexes --> Unicode Braille --> text
+
+Details
+
+- Get a sorted `numpy` array of blob coordinates from `opencv` detected keypoints.
+- Group coordinates by line.
+- Find cells representing a character
+- Translate cell coordinates to Braille character indexes (1,2,3 for the first column, 4,5,6 for the second).
+- Translate dot indexes to Unicode Braille characters.
+- Translate Unicode Braille to English text with python-louis (liblouis).
+
 Created on Dec 31, 2024
 
 @author: lmc
 '''
 
 import sys
+from future.builtins.misc import isinstance
+import logging
 import yaml
 import cv2
 import numpy as np
@@ -12,8 +29,7 @@ import unicodedata as uc
 import louis
 from pybrl2txt.models import Page, Line, Area
 from pybrl2txt.braille_maps import BLANK
-from future.builtins.misc import isinstance
-import logging
+
 
 logger = logging.getLogger("pybrl2txt")
 logging.basicConfig(
@@ -23,11 +39,11 @@ logging.basicConfig(
 uni_prefix = 'BRAILLE PATTERN DOTS-'
 
 def get_build_detector_params(cv2_params):
-    min_area = cv2_params['cv2_cfg']['detect']['min_area']
-    max_area = cv2_params['cv2_cfg']['detect']['max_area']
-    min_inertia_ratio = cv2_params['cv2_cfg']['detect']['min_inertia_ratio']
-    min_circularity = cv2_params['cv2_cfg']['detect'].get('min_circularity', 0.9)
-    min_convexity = cv2_params['cv2_cfg']['detect'].get('min_convexity', 0.75)
+    min_area = cv2_params['detect']['min_area']
+    max_area = cv2_params['detect']['max_area']
+    min_inertia_ratio = cv2_params['detect']['min_inertia_ratio']
+    min_circularity = cv2_params['detect'].get('min_circularity', 0.9)
+    min_convexity = cv2_params['detect'].get('min_convexity', 0.75)
     # Set up SimpleBlobDetector
     params = cv2.SimpleBlobDetector_Params()
     
@@ -48,6 +64,8 @@ def get_build_detector_params(cv2_params):
     return params
 
 def get_keypoints(img_path, cv2_params):
+    """Detect Braille dots coordinates from image."""
+
     image = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
     #ret,image = cv2.threshold(image,64,255,cv2.THRESH_BINARY)
     params = get_build_detector_params(cv2_params)
@@ -56,7 +74,7 @@ def get_keypoints(img_path, cv2_params):
     keypoints = detector.detect(image)
     return keypoints, image
 
-def show_detection(image, detected_lines, xcell, csize, xmin, ymax):
+def show_detection(image, detected_lines, page, all_lines_params, cv2_params):
     """Help to visually debug if lines are correctly detected since dots would be colored by line.
     Black dots represent not correctly detected cells/lines.
     Color will repeat every four lines."""
@@ -66,13 +84,26 @@ def show_detection(image, detected_lines, xcell, csize, xmin, ymax):
         colors.extend(colors)
     # Draw detected blobs as red circles
     output_image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-    
-#    x = xmin
-#    for line in detected_lines:
-#        for i in range(1,len(line)):
-#            output_image = cv2.line(image, ( int(x + csize * i), 50), (int(x + csize * i),ymax), (0, 255, 0), thickness=1)
-
+#    show_detect:
+#            enabled: true
+#            with_cell_end: true
+#            with_keypoints: true
     for i, line in enumerate(detected_lines):
+        if cv2_params.get('enabled', False) and cv2_params.get('with_cell_end', False):
+            xmaxl = int(all_lines_params[i].xmax)
+            yminl = int(all_lines_params[i].ymin - 3)
+            ymaxl = int(all_lines_params[i].ymax + 3)
+            
+            cell_start, cell_end = get_cell_start_end(page, all_lines_params[i], 0) 
+            for j in range(1,int(xmaxl/all_lines_params[i].cell_params.csize) + 1):
+                cell_end_pos = int(all_lines_params[i].xmin + (cell_end - cell_start) * j - int(line[0].size))
+                #logger.debug(f"Ln {all_lines_params[i].line_num}, cell {j - 1} end pos {cell_end_pos}")
+                x0y0 = (cell_end_pos, yminl)
+                x1y1 = (cell_end_pos, ymaxl)
+                output_image = cv2.line(output_image, x0y0 , x1y1, (0, 0, 0), thickness=1)
+                if cell_end_pos > all_lines_params[i].xmax:
+                    break
+
         output_image = cv2.drawKeypoints(output_image, line, np.array([]), colors[i], cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
     logger.info("Showing detection result")
@@ -84,6 +115,7 @@ def group_by_lines(kp_map, blob_coords, xydiff, page_params):
     """Group coordinates by lines."""
     ycell = page_params.cell_params.ydot
     lines_coord = []
+    all_lines_params = []
     detected_lines = [[kp_map[blob_coords[0][0], blob_coords[0][1]]]]
     # split coordinates by lines
     line_cnt = 1
@@ -108,7 +140,8 @@ def group_by_lines(kp_map, blob_coords, xydiff, page_params):
     for i,d in enumerate(detected_lines):
         if len(d) != len(lines_coord[i]):
             logger.error(f"ERROR on group by. Keypoint line length {len(d)} defers from coordinates line length. {len(lines_coord[i])}")
-    return detected_lines, lines_coord
+        all_lines_params.append(get_line_area_parmeters(lines_coord[i], i, page_params))
+    return detected_lines, lines_coord, all_lines_params
 
 def get_area_parameters(coords, area_obj: Area):
     """Parameters to help find cells from detected coordinates.
@@ -118,15 +151,15 @@ def get_area_parameters(coords, area_obj: Area):
     # xdiff is negative, ydiff is greater than vertical cell size --> current dot is starting a line.
     xydiff = np.diff(coords, axis=0)
     
-    xcoords = coords[coords[:,0] > 1][:,0]
-    ycoords = coords[coords[:,1] > 1][:,1]
+    xcoords = np.unique(coords[coords[:,0] > 1][:,0])
+    ycoords = np.unique(coords[coords[:,1] > 1][:,1])
     # minimum x in the whole image
-    xmin = np.array(xcoords).min()
+    xmin = xcoords.min()
     # max x in the whole image. Represents last dot in a line.
-    xmax = np.array(xcoords).max()
+    xmax = xcoords.max()
     # minimum y in the whole image
-    ymin = np.array(ycoords).min()
-    ymax = np.array(ycoords).max()
+    ymin = ycoords.min()
+    ymax = ycoords.max()
     
     area_obj.xmin = xmin
     area_obj.xmax = xmax
@@ -161,6 +194,43 @@ def get_area_parameters(coords, area_obj: Area):
         logger.debug(f"{area_obj}")
     
     return area_obj, xydiff
+
+def get_line_area_parmeters(line_coor, ln, page):
+    """Get Line Area parameters with corrections if necessary.
+    
+    Parameters
+    ----------
+        line_coor: ndarray
+            numpy array of coordinates by line
+        ln: int
+            line number
+        page: Page
+            Page Area parameters
+    
+    Returns
+    -------
+        line_params: Line
+            Line object with corrected Area parameters if necessary.
+        """
+    
+    line_params = Line()
+    line_params.line_num = ln
+    line_params = get_area_parameters(line_coor, line_params)[0]
+    line_params.cell_params.normalized = page.cell_params.normalized
+    # Line min x coordinate is greater than page one so the
+    # line probably starts with dots in the second column (4,5,6)
+    # or with spaces.
+    if line_params.xmin > page.xmin:
+        line_params.xmin = page.xmin 
+    # Line max x coordinate is less that page one so the line is shorter.
+#    if line_params.xmax < page.xmax:
+#        line_params.xmax = page.xmax
+    # Calculated cell size for the line is greater than page calculated cell size.
+    # It's probably an indicator of page irregularities or bad blob detections
+    if line_params.cell_params.csize > page.cell_params.csize:
+        logger.warning(f"Line {ln}/Page params differ. Page : {page.cell_params}")
+        logger.warning(f"Line {ln}/Page params differ. Line : {line_params.cell_params}") #line_params.cell_params.csize = page.cell_params.csize
+    return line_params
 
 def cell_to_braille_indexes_no_magic(cell, line_params, idx):
     """Return a sorted tuple representing dot indexes in the cell.
@@ -418,31 +488,13 @@ def get_cell_start_end(page, line_params, idx):
     
     return cell_start, cell_end
 
-def translate_line(line_coor, ln, page):
+def translate_line(line_coor, ln, page, line_params):
     """Return array of cells in a line with BLANK inserted.
     Area parameters are recalculated with specific line values.
     
     Line coordinates are split into words and then words into cells. 
     """
-    line_params = Line()
-    line_params.line_num = ln
-    line_params = get_area_parameters(line_coor, line_params)[0]
     cp = line_params.cell_params
-    cp.normalized = page.cell_params.normalized
-    # Line min x coordinate is greater than page one so the 
-    # line probably starts with dots in the second column (4,5,6)
-    # or with spaces.
-    if line_params.xmin > page.xmin:
-            line_params.xmin = page.xmin
-    # Line max x coordinate is less that page one so the line is shorter.
-    if line_params.xmax < page.xmax:
-            line_params.xmax = page.xmax
-    # Calculated cell size for the line is greater than page calculated cell size.
-    # It's probably an indicator of page irregularities or bad blob detections
-    if line_params.cell_params.csize > page.cell_params.csize:
-        logger.warning(f"Line {ln}/Page params differ. Page : {page.cell_params}")
-        logger.warning(f"Line {ln}/Page params differ. Line : {line_params.cell_params}")
-        #line_params.cell_params.csize = page.cell_params.csize
     
     text = ''
     error_count = 0
@@ -486,7 +538,6 @@ def translate_line(line_coor, ln, page):
             ce = cs + cp.csize
         # add "space" between words
         cells.append([])
-        pass
         
     # translate cell coordinates to Braille indexes
     idxs = []
@@ -499,7 +550,7 @@ def translate_line(line_coor, ln, page):
         error_count +=  1 if is_cell_error else 0
         
     text += call_louis(idxs, ln, page.lang)
-    return text, line_params, error_count
+    return text, error_count
 
 def get_replacement_for_unknown_indexes():
     """Return a inverted question mark ¿ for not translated indexes"""
@@ -521,7 +572,6 @@ def call_louis(word_tuples, line_num, lang='en'):
     
     #TODO: build dict of available languages dynamically.
     languages = {'es': 'es-g2.ctb', 'en': 'en-ueb-g2.ctb', 'engbg2': 'en-GB-g2.ctb', 'fr': 'fr-bfu-g2.ctb'}
-    logger.debug(f"Locale table: {languages[lang]}")
     braille_uni_str = ''
     for w, wrd in enumerate(word_tuples):
         if -1 in wrd:
@@ -543,25 +593,43 @@ def call_louis(word_tuples, line_num, lang='en'):
     lou_transl = louis.backTranslate([languages[lang]], braille_uni_str)
     return lou_transl[0]
 
-def parse_image_file(cfg_path, img_path):
-    with open(cfg_path, 'r') as f:
-        config = yaml.load(f, Loader=yaml.SafeLoader)
-        grade = config['grade']
-        round_to = config['parse']['round_to']
-        lang = config['parse'].get('lang', 'en')
-        xmin = config['parse'].get('xmin')
-        normalized = config['parse'].get('normalized', True)
-        dot_min_sep = config['parse'].get('dot_min_sep')
-        show_detect = config['cv2_cfg']['detect']['show_detect']
-        if config.get('cfg') is not None:
-            logging_level = logging.getLevelName(config.get('cfg').get('logging_level', 'INFO').upper())
-            logger.setLevel(logging_level)
-    logger.info(f"Starting '{lang}' Grade {grade} braille to text translation of {img_path.split('/')[-1]}")
-    keypoints, image = get_keypoints(img_path, config)
+def parse_image_file(config, keypoints):
+    """Translation main process. Parse coordinates to obtain cell dot indexes and translate those to text_lines.
     
-    text = ''
+    Parameters
+    ----------
+    config : dict
+        Configuration object
+
+    keypoints : object
+        keypoints detected by opencv
+
+    Returns
+    -------
+    text_lines : float
+        list of text by lines
+    total_error: int
+        errors count
+
+    detected_lines: list
+        list of opencv keypopints by line
+    page: Page
+        Page area parameters
+    all_lines_params: list
+        list of Line area parameters
+    """
+    
+    round_to = config['parse']['round_to']
+    lang = config['parse'].get('lang', 'en')
+    xmin = config['parse'].get('xmin')
+    normalized = config['parse'].get('normalized', True)
+    dot_min_sep = config['parse'].get('dot_min_sep')
+    if config.get('cfg') is not None:
+        logging_level = logging.getLevelName(config.get('cfg').get('logging_level', 'INFO').upper())
+        logger.setLevel(logging_level)
+    
+    text_lines = []
     ln = -1
-    total = 0
     total_errors = 0
     try:
         # map of keypoints coordinates to keypoints
@@ -592,24 +660,23 @@ def parse_image_file(cfg_path, img_path):
         logger.info(f"keypoint sizes {areas}")
         
         # List of list of cells by line_params
-        detected_lines, lines_coord = group_by_lines(kp_map, blob_coords, xydiff, page)
-        
-        if show_detect:
-            show_detection(image, detected_lines, cp.xdot, cp.csize, page.xmin, 400)
+        detected_lines, lines_coord, all_lines_params = group_by_lines(kp_map, blob_coords, xydiff, page)
         
         # lines to cell by index
         for ln, line_coor in enumerate(lines_coord):
-            lntext, _, err_cnt = translate_line(line_coor, ln, page)
-            text += lntext
+            lntext, err_cnt = translate_line(line_coor, ln, page, all_lines_params[ln])
+            text_lines.append(lntext)
             total_errors += err_cnt
-            text += '\n'
     
     except Exception as e:
         logger.error(f"Critical error while parsing line {ln}: {e}", exc_info=logger.isEnabledFor(logging.DEBUG))
     
-    return text, total, total_errors
+    return text_lines,total_errors, detected_lines, page, all_lines_params
 
 def main(args):
+    """Main standard method.
+    """
+
     logging.basicConfig(level=logging.DEBUG)
     
     base_dir = ''
@@ -630,12 +697,24 @@ def main(args):
     
     img_path = f"{base_dir}/{image_path}"
     
-    text, total, total_errors = parse_image_file(cfg_path, img_path)
-
-    logger.info(f"Total words: {total}, total_errors: {total_errors}")
+    with open(cfg_path, 'r') as f:
+        config = yaml.load(f, Loader=yaml.SafeLoader)
+    
+    grade = config['grade']
+    lang = config['parse'].get('lang', 'en')
+    
+    logger.info(f"Starting '{lang}' Grade {grade} braille to text_lines translation of {img_path.split('/')[-1]}, config: {cfg_path}")
+    keypoints, image = get_keypoints(img_path, config['cv2_cfg'])
+    
+    text, total_errors, detected_lines, page, all_lines_params = parse_image_file(config, keypoints)
+    
+    if config['cv2_cfg']['show_detect']['enabled']:
+            show_detection(image, detected_lines, page, all_lines_params, config['cv2_cfg']['show_detect'])
+    
+    logger.info(f"Total_errors: {total_errors}")
 
     print(f'\n{"-" * 80}')
-    print(text)
+    print('\n'.join(text))
 if __name__ == '__main__':
     main(sys.argv)
     
