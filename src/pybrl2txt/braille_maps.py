@@ -1,6 +1,6 @@
 
 __all__ = ['BLANK', 'cell_map', 'numbers', 'prefixes', 'abbr', 'symbols', 'BLANK', 'ACUTE' \
-           'NUMBER', 'UPPER', 'ilc_pfx', 'abbr1', 'abbr2', 'abbr3']
+           'NUMBER', 'UPPER', 'ilc_pfx', 'abbr1', 'abbr2', 'abbr3', 'lou_languages']
 BLANK = (0,)
 
 ACUTE = 'ACUTE' #  ((4, 5), (3, 4))((1,),) -> á
@@ -12,6 +12,13 @@ ILC45 = 'ILC45'
 ILC456 = 'ILC456'
 # (5,6), # initial letter contraction
 ILC56 = 'ILC56'
+
+lou_languages = {
+    'es': ["unicode.dis",'es-g2.ctb'], 
+    'en': ["unicode.dis", 'en-ueb-g2.ctb'], 
+    'en-gb-g2': ["unicode.dis",'en-GB-g2.ctb'], 
+    'fr': ['fr-bfu-g2.ctb']
+    }
 
 cell_map = {
     (1,): 'a', (1,2): 'b', (1,4): 'c', (1,4,5): 'd', (1,5): 'e',

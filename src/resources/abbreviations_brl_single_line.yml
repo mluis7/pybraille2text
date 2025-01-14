@@ -1,0 +1,25 @@
+
+name: abbreviations_brl_single_line
+grade: 2
+
+cfg:
+    logging_level: debug
+parse:
+    #lang: engbg2
+    round_to: 0
+    offset: 1.15
+    # sensitive value
+    xmin: 54
+    normalized: true
+cv2_cfg:
+    detect:
+        min_area: 50
+        max_area: 90
+        min_inertia_ratio: 0.75
+        min_circularity: 0.75
+        min_convexity: 0.75
+    show_detect:
+        enabled: false
+        with_cell_end: true
+        with_keypoints: true
+        
