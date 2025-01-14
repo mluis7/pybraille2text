@@ -34,6 +34,7 @@ class CellParams(object):
     xsep = 0
     csize = 0
     ydot = 0
+    blob_sizes = None
     normalized = True
     
     def __repr__(self):
@@ -47,7 +48,7 @@ class Page(Area):
     Page attributes
     '''
     cell_params  = CellParams()
-    lines = []
+    lines_params = {}
     lang = 'en'
 
 @dataclass
