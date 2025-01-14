@@ -6,7 +6,7 @@ cfg:
     logging_level: debug
 
 parse:
-    lang: engbg2
+    lang: en-gb-g2
     round_to: 0
     offset: 1.15
     #xmin: 77
@@ -19,5 +19,8 @@ cv2_cfg:
         min_inertia_ratio: 0.85
         min_circularity: 0.80
         min_convexity: 0.75
-        show_detect: false
+    show_detect:
+        enabled: true
+        with_cell_end: false
+        with_keypoints: true
         

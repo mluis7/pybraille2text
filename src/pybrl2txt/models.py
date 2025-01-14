@@ -20,19 +20,21 @@ class CellParams(object):
     xdot: x distance between cell dots
     ydot: y distance between cell dots
     xsep: x separation between cells
-    csize: total cell x size.
+    csize: total cell width (xdot + xsep).
     See: get_area_parameters() on how they are calculated.
     
     |<-- csize  -->|
-    |<xdot>|
+    |<xdot>|<xsep >|
     *      *        *      * -
     *      *        *      * - ydot
     *      *        *      *
+    
     """
     xdot = 0
     xsep = 0
     csize = 0
     ydot = 0
+    blob_sizes = None
     normalized = True
     
     def __repr__(self):
@@ -46,7 +48,7 @@ class Page(Area):
     Page attributes
     '''
     cell_params  = CellParams()
-    lines = []
+    lines_params = {}
     lang = 'en'
 
 @dataclass
@@ -64,7 +66,7 @@ class Line(Area):
     cell_params  = CellParams()
     
     def __repr__(self):
-        return f"Line: {self.line_num}, ydot14: {self.ydot14}, ydot25: {self.ydot25}, ydot36: {self.ydot36}"
+        return f"Line: {self.line_num}, xmin/xmax: {self.xmin}/{self.xmax}, ymin/ymax: {self.ymin}/{self.ymax}, csize: {self.cell_params.csize}"
     def __str__(self):
         return self.__repr__()
 

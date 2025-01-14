@@ -1,21 +1,22 @@
 
-name: abbraviations
+name: abbreviations_brl_small
 grade: 2
 
 cfg:
     logging_level: debug
 parse:
-    #lang: es
+    #lang: engbg2
     round_to: 0
     offset: 1.15
+    normalized: true
+    # sensitive value
     #xmin: 54
-    #normalized: false
 cv2_cfg:
     detect:
-        min_area: 18
-        max_area: 200
-        min_inertia_ratio: 0.85
-        min_circularity: 0.80
+        min_area: 10
+        max_area: 100
+        min_inertia_ratio: 0.75
+        min_circularity: 0.85
         min_convexity: 0.75
     show_detect:
         enabled: false

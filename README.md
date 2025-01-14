@@ -14,6 +14,7 @@ Status: Alpha/PoC
 - [Translate dot indexes to text](#translate-dot-indexes-to-text)
 - [Tuning suggestions](#tuning-suggestions)
 - [Tests](#tests)
+- [Documentation](#documentation)
 - [Compiling liblouis20](#compiling-liblouis20)
 
 <!-- TOC end -->
@@ -122,6 +123,16 @@ The test in Spanish language gives a translation with errors but `liblouis` bina
 test_all_abbreviations.py
 test_camel_case.py
 test_spanish.py
+```
+
+## Documentation
+Read docstrings with
+```
+python3.11 -m pydoc pybrl2txt.braille_to_text
+
+# or
+
+python3.11 -m pydoc src/pybrl2txt/braille_to_text.py
 ```
 
 ## Compiling liblouis20

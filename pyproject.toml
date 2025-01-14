@@ -3,12 +3,11 @@ requires = ["setuptools>=61.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pybraille"
+name = "pybraille2text"
 dynamic = ["version"]
 
 dependencies = [
   "opencv-python",
-  "unicodedata",
   "numpy",
   "pyyaml"
 ]
