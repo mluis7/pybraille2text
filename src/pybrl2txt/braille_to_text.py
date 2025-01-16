@@ -29,7 +29,7 @@ import unicodedata as uc
 import louis
 from pybrl2txt.brl2txt_logging import addLoggingLevel
 from pybrl2txt.models import Page, Line, Area
-from pybrl2txt.braille_maps import BLANK, lou_languages
+from pybrl2txt.braille_maps import BLANK, lou_languages, dots_rels
 
 
 logger = logging.getLogger("pybrl2txt")
@@ -119,25 +119,27 @@ def group_by_lines(kp_map, blob_coords, xydiff, page_params):
     ycell = page_params.cell_params.ydot
     lines_coord = []
     detected_lines = [[kp_map[blob_coords[0][0], blob_coords[0][1]]]]
-    # split coordinates by lines
-    line_cnt = 1
+    # split keypoints by lines
     for i, d in enumerate(xydiff):
         curr_pt = blob_coords[i + 1]
         if curr_pt[0] >= 714 and curr_pt[1] >= 820 and curr_pt[1] < 851:
             pass
         current_keypoint = kp_map[curr_pt[0], curr_pt[1]]
         if (d[0] < 0 and d[1] >= ycell * 2.5) :
+            # Add a new line
             detected_lines.append([current_keypoint])
-            line_cnt += 1
         else:
             detected_lines[-1].append(current_keypoint)
     p0 = 0
     p1 = len(detected_lines[0])
+    # split coordinates by lines
     for j, _ in enumerate(detected_lines):
         if j > 0:
             p0 = p0 + len(detected_lines[j - 1])
         p1 = p0 + len(detected_lines[j])
-        lines_coord.append(blob_coords[p0:p1])
+        line_coor = blob_coords[p0:p1]
+        line_coor = line_coor[np.lexsort((line_coor[:, 1], line_coor[:, 0]))]
+        lines_coord.append(line_coor)
     
     for i,d in enumerate(detected_lines):
         if len(d) != len(lines_coord[i]):
@@ -148,6 +150,7 @@ def group_by_lines(kp_map, blob_coords, xydiff, page_params):
         page_params.lines_params[i] = Line()
         page_params.lines_params[i].line_num = i
         page_params.lines_params[i].cell_params.blob_sizes = areas
+        page_params.lines_params[i].cell_params.dot_size_spec =  page_params.cell_params.dot_size_spec
         get_line_area_parmeters(lines_coord[i], i, page_params)
 
     return detected_lines, lines_coord
@@ -174,17 +177,20 @@ def get_area_parameters(coords, area_obj: Area):
     area_obj.xmax = xmax
     area_obj.ymin = ymin
     area_obj.ymax = ymax
-    
-    xuniq_from_diff = np.unique(np.round(xydiff[(xydiff[:,0] > 1)][:,0]))
-    # x separation between dots in a cell
-    xcell = xuniq_from_diff.min()
-    # y separation between dots in a cell
-    yuniq_from_diff = np.unique(np.round(xydiff[(xydiff[:,1] > 1)][:,1]))
-    if len(yuniq_from_diff) > 0:
-        ycell = yuniq_from_diff.min()
+    if isinstance(area_obj, Page):
+        area_obj.cell_params.dot_size_spec = ((xmax-xmin)/40)/dots_rels['x_size_max']
+        # Firs pass. Use a low value to allow correct line detection
+        xms = 1
     else:
-        logger.warning(f"Line coordinates have weird Y values.")
-        ycell = xcell
+        xms = area_obj.cell_params.dot_size_spec
+    
+    # get X diffs for values greater than expected dot size
+    xuniq_from_diff = np.unique(np.round(xydiff[(xydiff[:,0] > xms)][:,0]))
+    # x separation between dots in a cell
+    xcell = np.average(xuniq_from_diff[(xuniq_from_diff >= xuniq_from_diff.min()) & (xuniq_from_diff <= xuniq_from_diff.min() + 3)])
+    # see dots_rels for size relationship between xdot and cell size
+    # which is between 2.6 and 3.05 according to BANA. (2.4, 3) used to narrow limits a bit.
+    csizes = xuniq_from_diff[(xuniq_from_diff >= xcell * 2.4) & (xuniq_from_diff <= xcell * 3)]  
     # x separation between cells
     # WARNING: rounding issues compensation - sensitive value
     if len(xuniq_from_diff[(xuniq_from_diff > xcell * 1.3)]) > 0:
@@ -194,16 +200,18 @@ def get_area_parameters(coords, area_obj: Area):
         xsep = round(xcell *  0.8)
     
     area_obj.cell_params.xdot = xcell
-    area_obj.cell_params.ydot = ycell
+    area_obj.cell_params.ydot = xcell
     area_obj.cell_params.xsep = xsep
-    area_obj.cell_params.csize = round(xcell + xsep)
-    
-    if ycell < np.average(area_obj.cell_params.blob_sizes):
-        ycell = xcell - 1
+    if len(csizes) == 0:
+        # Fallback value but the other is preferred 
+        area_obj.cell_params.csize = xcell + xsep
+    else:
+        area_obj.cell_params.csize = np.average(csizes)
+        #area_obj.cell_params.xsep = area_obj.cell_params.csize - xcell
     
     # If it's a Line, set the y-coord possible values 
     if isinstance(area_obj, Line):
-        area_obj.cell_count = round((area_obj.xmax + area_obj.cell_params.xdot - area_obj.xmin)/area_obj.cell_params.csize) + 1
+        area_obj.cell_count = round((area_obj.xmax + int(area_obj.cell_params.xdot) - area_obj.xmin)/int(area_obj.cell_params.csize)) + 1
         yuniq = np.unique(np.round(ycoords[(ycoords > 1)]))
         # used by cell_to_braille_indexes_no_magic method
         area_obj.ydot14 = yuniq[0]
@@ -248,8 +256,8 @@ def get_line_area_parmeters(line_coor, ln, page):
     # Calculated cell size for the line is greater than page calculated cell size.
     # It's probably an indicator of page irregularities or bad blob detections
     if line_params.cell_params.csize > page.cell_params.csize:
-        logger.warning(f"Line {ln}/Page params differ. Page : {page.cell_params}")
-        logger.warning(f"Line {ln}/Page params differ. Line : {line_params.cell_params}") #line_params.cell_params.csize = page.cell_params.csize
+        logger.warning(f"Page/Line {ln} params differ. Page : {page.cell_params}")
+        logger.warning(f"Page/Line {ln} params differ. Line : {line_params.cell_params}") #line_params.cell_params.csize = page.cell_params.csize
     page.lines_params[ln] = line_params
     return line_params
 
@@ -455,7 +463,7 @@ def cell_keypoints_to_braille_indexes(cell, page, line_params, idx):
     #
     # Cell start fixing rules
     #    Attempt to handle: blob detection from images of unknown source, 
-    #    lines of different length, irregular or to much white space between cells,
+    #    lines of different length, irregular or too much white space between cells,
     #    unknown Braille grade, etc.
     #
     # - It's not the first cell and has 2 unique x coordinates so cell starts at the min of them
@@ -524,7 +532,6 @@ def translate_line(line_coor, ln, page, line_params):
     cells = []
     wrd_cells = []
     # IMPORTANT: line coordinates are sorted by y then x to get cell ordered coordinates 
-    line_coor = line_coor[np.lexsort((line_coor[:, 1], line_coor[:, 0]))]
     line_diff = np.diff(line_coor, axis=0)
     # FIXME: offset added to fix word split. 'else' -> 'el se'
     # line coordinates differences greater than cell size. Represent end of a word
@@ -585,6 +592,10 @@ def get_replacement_for_unknown_indexes():
     
     return unk_replace
 
+def call_louis_to_Braille_ascii(braille_uni_str, lang='en-ascii'):
+    # to Braille ASCII
+    return louis.backTranslate(lou_languages[lang], braille_uni_str)[0]
+
 def call_louis(word_tuples, line_num, lang='en'):
     """Convert index tuples to unicode characters for the whole line,
     then supply that braille unicode text to python-louis to get translated text.
@@ -619,6 +630,7 @@ def call_louis(word_tuples, line_num, lang='en'):
     # setting mode=louis.noUndefined will remove \<numbers>/ errors from translation
     # but the error count would be lost
     lou_transl = louis.backTranslate(lou_languages[lang], braille_uni_str)
+    
     # translated string contains an untranslated sequence like \45/
     # just one error per line is counted even if there are more
     eib = lou_transl[0].find('\\')
@@ -630,7 +642,7 @@ def call_louis(word_tuples, line_num, lang='en'):
         
     return lou_transl[0], braille_uni_str, err_count
 
-def  parse_image_file(config, keypoints):
+def  parse_keypoints(config, keypoints):
     """Translation main process. Parse coordinates to obtain cell dot indexes and translate those to text_lines.
     
     Parameters
@@ -645,6 +657,8 @@ def  parse_image_file(config, keypoints):
     -------
     text_lines : float
         list of text by lines
+    braille_lines : float
+        list of braille unicode by lines
     total_error: int
         errors count
 
@@ -664,6 +678,7 @@ def  parse_image_file(config, keypoints):
     
     detected_lines = None
     text_lines = []
+    braille_lines = []
     ln = -1
     total_errors = 0
     try:
@@ -701,16 +716,29 @@ def  parse_image_file(config, keypoints):
         
         # lines to cell by index
         for ln, line_coor in enumerate(lines_coord):
-            lntext, _, err_cnt = translate_line(line_coor, ln, page, page.lines_params[ln])
+            lntext, lntxt_braille, err_cnt = translate_line(line_coor, ln, page, page.lines_params[ln])
             
             text_lines.append(lntext)
+            braille_lines.append(lntxt_braille)
             total_errors += err_cnt
     
     except Exception as e:
         logger.error(f"Critical error while parsing lines: {e}", exc_info=logger.isEnabledFor(logging.DEBUG))
         return [], 1, [], None, None
     
-    return text_lines,total_errors, detected_lines, page
+    return text_lines,braille_lines,total_errors, detected_lines, page
+
+
+def parse_image_file(img_path, config):
+    if config.get('cfg') is not None:
+        logging_level = logging.getLevelName(config.get('cfg').get('logging_level', 'INFO').upper())
+        logger.setLevel(logging_level)
+    
+    keypoints, image = get_keypoints(img_path, config['cv2_cfg'])
+    text, braille_lines, total_errors, detected_lines, page = parse_keypoints(config, keypoints)
+    if config['cv2_cfg']['show_detect']['enabled']:
+        show_detection(image, detected_lines, page, config['cv2_cfg']['show_detect'])
+    return text, braille_lines, total_errors
 
 def main(args):
     """Main standard method.
@@ -741,24 +769,19 @@ def main(args):
     
     grade = config['grade']
     lang = config['parse'].get('lang', 'en')
-    
-    if config.get('cfg') is not None:
-        logging_level = logging.getLevelName(config.get('cfg').get('logging_level', 'INFO').upper())
-        logger.setLevel(logging_level)
-
     logger.info(f"Starting '{lang}' Grade {grade} braille to text_lines translation")
     logger.info(f"Image file: {img_path.split('/')[-1]}, config: {cfg_path}")
-    keypoints, image = get_keypoints(img_path, config['cv2_cfg'])
     
-    text, total_errors, detected_lines, page = parse_image_file(config, keypoints)
-    
-    if config['cv2_cfg']['show_detect']['enabled']:
-            show_detection(image, detected_lines, page, config['cv2_cfg']['show_detect'])
+    text, braille_lines, total_errors = parse_image_file(img_path, config)
     
     logger.info(f"Total_errors: {total_errors}")
 
     print(f'\n{"-" * 80}')
     print('\n'.join(text))
+    
+#    print(f'\n{"-" * 80}')
+#    for brl_ln in braille_lines:
+#        print(call_louis_to_Braille_ascii(brl_ln), f"{lang}-ascii")
 if __name__ == '__main__':
     main(sys.argv)
     

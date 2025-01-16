@@ -17,9 +17,24 @@ lou_languages = {
     'es': ["unicode.dis",'es-g2.ctb'], 
     'en': ["unicode.dis", 'en-ueb-g2.ctb'], 
     'en-gb-g2': ["unicode.dis",'en-GB-g2.ctb'], 
+    'en-gb-g1': ["unicode.dis",'en-gb-g.ctb'], 
+    'en-ascii': ['en-chardefs.cti', 'unicode.dis'],
     'fr': ['fr-bfu-g2.ctb']
     }
 
+# https://brailleauthority.org/size-and-spacing-braille-characters
+# x_dot_to_dot[0]/x_cell_to_cell[0] = 2.65
+# x_dot_to_dot[1]/x_cell_to_cell[1] = 3.04
+cell_specs = {
+    "x_dot_to_dot": [2.3, 2.5],
+    "x_cell_to_cell": [6.1, 7.6],
+    "y_line_to_line": [10.0, 10.2]
+}
+
+dots_rels = {
+    "x_size_min": cell_specs["x_cell_to_cell"][0]/cell_specs["x_dot_to_dot"][0],
+    "x_size_max": cell_specs["x_cell_to_cell"][1]/cell_specs["x_dot_to_dot"][1],
+    }
 cell_map = {
     (1,): 'a', (1,2): 'b', (1,4): 'c', (1,4,5): 'd', (1,5): 'e',
     (1,2,4): 'f', (1,2,4,5): 'g', (1,2,5): 'h', (2,4): 'i', (2,4,5): 'j',

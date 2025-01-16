@@ -20,7 +20,7 @@ cv2_cfg:
         min_circularity: 0.80
         min_convexity: 0.75
     show_detect:
-        enabled: true
-        with_cell_end: false
+        enabled: false
+        with_cell_end: true
         with_keypoints: true
         
