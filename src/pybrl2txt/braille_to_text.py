@@ -808,6 +808,7 @@ def translate_line(line_coor, ln, page):
     error_count = 0
     cells = []
     wrd_cells = []
+    
     # IMPORTANT: line coordinates are already sorted by y then x to get cell ordered coordinates 
     line_diff = np.diff(line_coor, axis=0)
     # FIXME: offset added to fix word split. 'else' -> 'el se'
@@ -876,6 +877,10 @@ def translate_line(line_coor, ln, page):
         
     text, braille_uni_str, lou_err = call_louis(idxs, ln, page.lang)
     error_count += lou_err
+    # Restore line indentation if any
+    if is_diff_ge(page.xmin, cells[0][0][0], page.cp.csize):
+        for i in range(round((cells[0][0][0] - page.xmin)/page.cp.csize)):
+            text = ' ' + text
     return text, braille_uni_str, error_count
 
 def get_replacement_for_unknown_indexes():
