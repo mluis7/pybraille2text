@@ -1,25 +1,27 @@
 
-name: abbreviations_brl_single_line
+name: abbraviations
 grade: 2
 
 cfg:
     logging_level: debug
+
 parse:
-    #lang: engbg2
+    lang: fr-bfu-g2
     round_to: 0
     offset: 1.15
-    # sensitive value FIXME
-    xmin: 54
+    xmin: 29
+    #dot_min_sep: 9
     normalized: true
 cv2_cfg:
     detect:
-        min_area: 20
-        max_area: 90
-        min_inertia_ratio: 0.75
-        min_circularity: 0.75
+        min_area: 12
+        max_area: 200
+        min_inertia_ratio: 0.85
+        min_circularity: 0.80
         min_convexity: 0.75
     show_detect:
         enabled: false
+        with_ref_dots: true
         with_cell_end: true
         with_keypoints: true
         

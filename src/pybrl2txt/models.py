@@ -58,13 +58,14 @@ class Page(Area):
     '''
     Page attributes
     '''
-    cell_params  = CellParams()
+    cp  = CellParams()
     lines_params = {}
+    ref_cells = []
     lang = 'en'
 
 @dataclass
 class Line(Area):
-    # Get y possible values if parent object is a Line.
+    # Dots vertical separation possible values if parent object is a Line.
     # A Line should have only 3 possible values.
     # Name suffix represents cell braille indexes, e.g. 14 means cell 1 or 4
     ydot14 = 0
@@ -74,10 +75,10 @@ class Line(Area):
     line_num = -1
     cell_count = 0
     # CellParams
-    cell_params  = CellParams()
+    cp  = CellParams()
     
     def __repr__(self):
-        return f"Line: {self.line_num}, xmin/xmax: {self.xmin}/{self.xmax}, ymin/ymax: {self.ymin}/{self.ymax}, csize: {self.cell_params.csize:.2f}, blob_sizes: {self.cell_params.blob_sizes}"
+        return f"Ln: {self.line_num:>2}, p0: ({self.xmin}, {self.ymin:4.1f}), p_nth: ({self.xmax:6.1f}, {self.ymax:6.1f}), csize: {self.cp.csize:.2f}, cell_count: {self.cell_count}, blob_sizes: {self.cp.blob_sizes}"
     def __str__(self):
         return self.__repr__()
 

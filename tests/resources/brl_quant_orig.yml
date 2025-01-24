@@ -1,0 +1,31 @@
+
+name: abbraviations
+grade: 2
+
+cfg:
+    logging_level: debug
+
+parse:
+    #lang: en
+    lang: en-us
+    round_to: 1
+    xmin: 50
+    #dot_min_sep: 9
+    normalized: true
+cv2_cfg:
+    detect:
+        min_area: 5
+        max_area: 100
+        min_inertia_ratio: 0.5
+        min_circularity: 0.5
+        min_convexity: 0.5
+        min_dist_between_blobs: 5
+        min_threshold: 20
+        max_threshold: 50
+        
+    show_detect:
+        enabled: false
+        basic: false
+        with_cell_end: false
+        with_keypoints: true
+        

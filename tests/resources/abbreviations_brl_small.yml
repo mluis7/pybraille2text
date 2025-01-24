@@ -13,7 +13,7 @@ parse:
     #xmin: 54
 cv2_cfg:
     detect:
-        min_area: 10
+        min_area: 8
         max_area: 100
         min_inertia_ratio: 0.75
         min_circularity: 0.85

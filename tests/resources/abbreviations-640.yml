@@ -12,13 +12,17 @@ parse:
     #normalized: false
 cv2_cfg:
     detect:
-        min_area: 18
-        max_area: 200
-        min_inertia_ratio: 0.85
-        min_circularity: 0.80
-        min_convexity: 0.75
+        min_area: 9
+        max_area: 55
+        min_inertia_ratio: 0.5
+        min_circularity: 0.5
+        min_convexity: 0.5
+        minDistBetweenBlobs: 5
+        minThreshold: 20
+        maxThreshold: 50
     show_detect:
         enabled: false
+        basic: false
         with_ref_dots: true
         with_cell_end: true
         with_keypoints: true
