@@ -11,26 +11,31 @@ def test_case(image_path, cfg_path):
     config['cfg']['logging_level'] = 'WARNING'
     
     text, braille_lines, total_errors = brl2t.parse_image_file(f"{base_dir}/{image_path}", config)
-    bname = os.path.basename(image_path).split('.')[0]
+    img_name = os.path.basename(image_path)
+    bname = img_name.split('.')[0]
     if total_errors != 0:
-        print(f"ERRORS: {total_errors} on {bname}")
+        print(f"ERRORS: {total_errors} on {img_name}, lang: '{config['parse'].get('lang', 'en-ueb-g2')}'")
     else:
-        print(f"SUCCESS: {bname}")
+        print(f"SUCCESS: {img_name}, lang: '{config['parse'].get('lang', 'en-ueb-g2')}'")
     
     with open(f"{base_dir}/{bname}.txt", 'r') as t:
         for ln, line in enumerate(t.readlines()):
             if line == '':
                 continue
             if line.strip() != text[ln].strip():
-                print(f'  {"-" * 50}')
+                #print(f'  {"-" * 50}')
                 orig = line.strip().split(' ')
                 trans = text[ln].strip().split(' ')
                 diff1 = [item for item in orig if item not in trans]
                 diff2 = [item for item in trans if item not in orig]
-                print(f"  Orig {len(orig)}, ln {ln}: {diff1}")
-                print(f"  Tran {len(trans)}, ln {ln}: {diff2}")
-    
+                print(f"  ln {ln}: Orig {diff1}")
+                print(f"  ln {ln}: Tran {diff2}")
 
+print(f'\n{"#" * 70}')
+print("Running tests.")
+print("SUCCESS means no cell detection error so inaccuracies are\nliblouis usage related (AFAIK, FIXME).")
+print("Translated Languages: en-ueb-g2, en-us-g2, es-g2, fr-bfu-g2")
+print(f'{"#" * 70}\n')
 args = []
 args.extend(['', 'resources', '../src/resources/abbreviations.yml', "abbreviations.png"])
 #brl2t.main(args)
@@ -87,7 +92,6 @@ cfg_path = args[2]
 image_path = args[3]
 test_case(image_path, cfg_path)
 
-#INFO    [pybrl2txt] Image file: technical_new.png, config: ../../tests/resources/brl.yml
 print(f'\n{"-" * 80}')
 args = []
 args.extend(['', 'resources', 'resources/brl.yml', "technical_new.png"])

@@ -380,10 +380,8 @@ def get_area_parameters(coords, area_obj: Area):
     
     # x separation between cells
     # WARNING: rounding issues compensation - sensitive value
-    #x_seps0 = xuniq_diff[xuniq_diff > xcell * 1.3]
     x_seps = get_cell_dim_from_norm(xcell, xuniq_diff, 'cell_sep')
     if len(x_seps) > 0:
-        #xsep = np.average(np.unique(xuniq_diff[(xuniq_diff >= xcell * 1.3) & (xuniq_diff < xcell * 2)]))
         xsep = np.unique(x_seps).min()
 
     else:
@@ -396,7 +394,9 @@ def get_area_parameters(coords, area_obj: Area):
     if len(csizes) == 0:
         # Fallback value but the other is preferred 
         area_obj.cp.csize = xcell + xsep
+        logger.debug(f"Using fallback cell size: {area_obj.cp.csize}")
     else:
+        logger.debug(f"Found cell size: {csizes}")
         area_obj.cp.csize = np.average(csizes)
 
     # If it's a Line, set the y-coord possible values 
@@ -416,7 +416,7 @@ def get_area_parameters(coords, area_obj: Area):
         xcoor_sort = np.unique(sorted(xcoords.copy()))
         xcs_diff = np.diff(xcoor_sort)
         # index of diff representing cell separation or greater
-        xcs_diff = xcoor_sort[:-1][xcs_diff > area_obj.cp.xdot * 1.1]
+        xcs_diff = xcoor_sort[:-1][xcs_diff > area_obj.cp.xdot * 1.2]
         pxci = None
         for xci in xcs_diff:
             if pxci is None:
@@ -428,7 +428,7 @@ def get_area_parameters(coords, area_obj: Area):
             pxci = xci
             xref_coords.append([p0, p1])
         
-        # Add remaining cell if any
+        # Add remaining cells if any
         celli = xcoor_sort[(xcoor_sort > pxci)]
         if len(celli) > 0:
             p0, p1 = get_ref_cell_tuple(celli, xref_coords, area_obj)
@@ -469,8 +469,8 @@ def get_line_area_parmeters(line_coor, ln, page, areas):
     # Calculated cell size for the line is greater than page calculated cell size.
     # It's probably an indicator of page irregularities or bad blob detections
     if line_params.cp.csize > page.cp.csize:
-        logger.warning(f"Page/Line {ln} params differ. Page : {page.cell_params}")
-        logger.warning(f"Page/Line {ln} params differ. Line : {line_params.cell_params}") 
+        logger.warning(f"Page/Line {ln} params differ. Page : {page.cp}")
+        logger.warning(f"Page/Line {ln} params differ. Line : {line_params.cp}") 
         #line_params.cell_params.csize = page.cell_params.csize
     page.lines_params[ln] = line_params
     return line_params
@@ -771,6 +771,26 @@ def get_cell_start_end(cell, page, ln, idx):
     
     return cell_start, cell_end
 
+
+def cell_sanity_check(cll, wrdc, cp, cs, ln, wn, cn):
+    if is_diff_gt(cll[:, 0].max(), cll[:, 0].min(), cp.xsep):
+        logger.warning(f"Ln: {ln}, word {wn}, Cell {cn} contains more keypoints than it should. (max - min) {cll[:,0].max() - cll[:,0].min()} > xsep {cp.xsep} {cll}. Fixing...")
+        cll = wrdc[(wrdc[:, 0] >= cs) & (wrdc[:, 0] < cs + cp.xsep * 0.8)]
+    return cll
+
+
+def cell_size_check(cll, last_full_cell, cp, ln, wn, cn):
+    cxu = np.unique(cll[:, 0])
+    nxu = np.unique(last_full_cell[:, 0])
+# 2 contiguous cell with dots in both columns
+    if len(cxu) == 2 and len(nxu) == 2:
+        new_csize = np.round(np.unique(cxu).min() - np.unique(nxu).min(), 1)
+        if new_csize > 0 and new_csize != cp.csize and new_csize < cp.csize * 1.2 and is_diff_gt(new_csize, cp.csize, 0.2):
+            logger.warning(f"Ln: {ln}, word {wn}, Cell {cn} - fixed csize {cp.csize} to {new_csize}.")
+            cp.csize = new_csize
+            return True
+    return False
+
 def translate_line(line_coor, ln, page):
     """
     Return array of cells in a line with BLANK inserted.
@@ -815,62 +835,31 @@ def translate_line(line_coor, ln, page):
         # append remaining coordinates if any
         wrd_cells.append(line_coor[line_coor[:,0] > pwi[0]])
     
-    # how many cells represent 1 space
-    # rounded difference between first x coor of last word minus last x coord of the preceding word divide by csize
-    if len(wrd_cells) >= 2:
-        space_cells = round((wrd_cells[-1][:,0].min() - wrd_cells[-2][:,0].max()) / cp.xdot, 1)
-        logger.trace(f"Ln: {ln}, words: {len(wrd_cells)}, space size: {space_cells} (aprox. {space_cells * cell_specs['x_dot_to_dot'][0]:.2f} mm)")
-    
     is_csize_fixed = False
     last_full_cell = None
     #split words in cells
     for i, wrdc in enumerate(wrd_cells):
-        # Expected cell start and end
-        # WARNING: inaccuracies will impact translation- sensitive value
-        cs = wrdc[:,0].min()
-        
         if ln == 0 and i == 2:
             pass
-        ce = cs + cp.xsep
         cn = 0
-        # [[52.5  3. ] [68.   1. ]]
-        # [[ 92.    1. ] [107.5   3. ]]
         refs = page.ref_cells[(page.ref_cells[:,0,0] >= wrdc[:,0].min() - cp.xsep) & (page.ref_cells[:,0,0] <= wrdc[:,0].max() + cp.xsep)]
         for rc in refs:
-        #for rc in page.ref_cells[(page.ref_cells[:,0,0] <= wrdc[:,0].max())]:
+            # Expected cell start and end
+            # WARNING: inaccuracies will impact translation- sensitive value
             cs = rc[0][0]
             ce = rc[1][0]
-        #while ce < wrdc[:,0].max() + cp.csize:
             cll = wrdc[(wrdc[:,0] >= cs) & (wrdc[:,0] <= ce)]
-            # cell has dots in both columns
-            has_full_row = len(np.unique(cll[:, 0])) == 2
+            
             if len(cll) > 0:
-#                if cll[:,0].max() - cll[:,0].min() > cp.xsep:
-#                    logger.warning(f"Ln: {ln}. Cell {cn} in word {i} contains more keypoints than it should. (max - min) {cll[:,0].max() - cll[:,0].min()} > xsep {cp.xsep}. Fixing...")
-#                    cll = wrdc[(wrdc[:,0] >= cs) & (wrdc[:,0] < cs + cp.xsep * 0.8)]
-#                    has_full_row = len(np.unique(cll[:, 0])) == 2
-                cells.append(cll)
+                cells.append(cell_sanity_check(cll, wrdc, cp, cs, ln, i, cn))
                 cn += 1
-                # Fix cell size for small xdot distance (probably low res image) - once per line
-                if cp.xdot < 9 and not is_csize_fixed and last_full_cell is not None and len(np.unique(cll[:,0])) == 2:
-                    cxu = np.unique(cll[:,0])
-                    nxu = np.unique(last_full_cell[:,0])
-                    # 2 contiguous cell with dots in both columns
-                    if len(cxu) == 2 and len(nxu) == 2:
-                        new_csize = np.round(np.unique(cxu).min() - np.unique(nxu).min(), 1)
-                        if new_csize > 0 and new_csize != cp.csize and new_csize < cp.csize * 1.2 and abs(new_csize - cp.csize) > 0.2:
-                            logger.warning(f"Ln: {ln}, word {i}, Cell {cn} - fixed csize {cp.csize} to {new_csize}.")
-                            cp.csize = new_csize
-                            is_csize_fixed = True
-                    
-                if not is_csize_fixed and has_full_row:
-                    last_full_cell = cll
-            # Next cell starts at the end of the previous
-#            if has_full_row:
-#                cs = cll[:,0].max() + cp.xsep * 0.95
-#            else:
-#                cs = ce
-#            ce = cs + cp.csize
+                if cp.xdot < 9 and len(np.unique(cll[:, 0])) == 2:
+                    # Fix cell size for small xdot distance (probably low res image) - once per line
+                    if not is_csize_fixed and last_full_cell is not None:
+                        is_csize_fixed = cell_size_check(cll, last_full_cell, cp, ln, i, cn)
+                        
+                    if not is_csize_fixed :
+                        last_full_cell = cll
         # add "space" between words
         cells.append(np.array([]))
     is_csize_fixed = False

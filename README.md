@@ -33,9 +33,10 @@ Blob detection is very sensitive to image quality so currently it's tuned for th
 
 Tuning the detection parameters can be done by setting `cv2_cfg.detect.show_detect: true` in the configuration file.
 Detected dots in a line should all have the same color. Black dots without colored contour mean they were not detected. Small dots with color mean blob area
-detection errors that will lead to translation errors. Some times a lot of them so it's important.
+detection errors that will lead to translation errors. Some times a lot of them so it's important.  
+The extra line of small colored dots on top of the first line represents the calculated reference cells coordinates that help on detection visualization but also on cell detection. The vertical lines between cells is also another visual help to troubleshoot detection. The size of the extra colored dots represents how the dot was generated. Smallest dots (1 px) are the original ones detected by `opencv`, other sizes from 3 to 7 are calculated coordinates dots. This line is added only to be displayed and NOT PART of the original coordinates.
 
-![X difference between points](/src/resources/line-detection.png)
+![X difference between points](./src/resources/line_detection_dots_lines.png)
 
 ## Braille considerations
 It aims to translate Unified English Braille (Grade 2). Testing samples have been generated using [ABC Braille site](https://abcbraille.com/text) 
@@ -71,7 +72,7 @@ if (x-diff is negative) and (y-diff is greater than vertical cell size):
     "current dot is starting a line"
 ```
     
-![X difference between points](/src/resources/kp-differences.png)
+![X difference between points](./src/resources/kp-differences.png)
 
 ## Find cells representing a character
 Cell dimensions are extracted from calculated differences too. It's a key step.  
@@ -99,7 +100,7 @@ There are 2 available methods for translation:
 ## Translate dot indexes to text
 Probably the toughest part because Braille reading rules must be applied.
 It was decided not to write a new algorithm but to use `liblouis20` library instead
-since it provides python bindings.
+since it provides `python` bindings.
 The result is very promising for English language.  
 Spanish was tested but translation contained errors (~ 80% successful).
 See texts and images for those tests in `tests/resources`.
@@ -115,11 +116,15 @@ Language selection is done with `parse.lang` configuration property.
 If values are not close to each other then `cv2_cfg.detect.min_area` property needs tuning, e.g.: `[4, 10, 11]`.
 
 ## Tests
-A few simple tests have been added mostly for development control. Each one is supplied with the corresponding image, configuration file and plain text represented in the image. Run them as simple python scripts.
+A few simple tests have been added mostly for development control. Each one is supplied with the corresponding image, configuration file and plain text represented in the image. Run them as simple `python` scripts.
 The test in Spanish language gives a translation with errors but `liblouis` binaries also give the same errors in command line so it might be due to library issues. 
-**Note**: All test images were digitally generated 
+**Note**: All test images were digitally generated or screenshots from the web.
 
 ```
+# all significant tests
+test_all.py
+
+# individual tests
 test_all_abbreviations.py
 test_camel_case.py
 test_spanish.py
@@ -127,16 +132,19 @@ test_spanish.py
 
 ## Documentation
 Read docstrings with
+
 ```
 python3.11 -m pydoc pybrl2txt.braille_to_text
-
-# or
-
+```
+ 
+ or
+  
+```
 python3.11 -m pydoc src/pybrl2txt/braille_to_text.py
 ```
 
 ## Compiling liblouis20
-Some Linux distributions provide `python-louis` packages for some python versions but not others so it might have to be manually built.
+Some Linux distributions provide `python-louis` packages for some `python` versions but not others so it might have to be manually built.
 
 - Install `liblouis20` at OS level since tables are needed  
 e.g.:
