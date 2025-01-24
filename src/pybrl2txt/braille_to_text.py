@@ -340,6 +340,9 @@ def get_area_parameters(coords, area_obj: Area):
     :param coords: page or line dots coordinates
     :param area_obj: Page or Line objects
     """
+    is_page = isinstance(area_obj, Page)
+    is_line = isinstance(area_obj, Line)
+    log_pfx = f"Ln: {area_obj.line_num:>2}" if is_line else "Page:"
     # x,y differences between contiguous dots. Negative values mean second/third rows in a cell and the start of a line.
     # e.g.: previous point p0=(520,69), current point =(69, 140). xydiff = (-451, 71).
     # xdiff is negative, ydiff is greater than vertical cell size --> current dot is starting a line.
@@ -360,7 +363,7 @@ def get_area_parameters(coords, area_obj: Area):
     area_obj.xmax = xmax
     area_obj.ymin = ymin
     area_obj.ymax = ymax
-    if isinstance(area_obj, Page):
+    if is_page:
         area_obj.cp.dot_size_spec = ((xmax - xmin)/MAX_LINE_CELLS)/dots_rels['cell_size_min']
         # First pass. Use a low value to allow correct line detection
         xms = 1
@@ -385,7 +388,7 @@ def get_area_parameters(coords, area_obj: Area):
         xsep = np.unique(x_seps).min()
 
     else:
-        logger.warning(f"Line coordinates have weird X values. Setting xsep to {xcell *  1.4:.0f}")
+        logger.warning(f"{log_pfx} Line coordinates have weird X values. Setting xsep to {xcell *  1.4:.0f}")
         xsep = round(xcell *  1.4)
     
     area_obj.cp.xdot = xcell
@@ -394,13 +397,13 @@ def get_area_parameters(coords, area_obj: Area):
     if len(csizes) == 0:
         # Fallback value but the other is preferred 
         area_obj.cp.csize = xcell + xsep
-        logger.debug(f"Using fallback cell size: {area_obj.cp.csize}")
+        logger.debug(f"{log_pfx} Using fallback cell size: {area_obj.cp.csize}")
     else:
-        logger.debug(f"Found cell size: {csizes}")
+        logger.trace(f"{log_pfx} Found cell size: {csizes}")
         area_obj.cp.csize = np.average(csizes)
 
     # If it's a Line, set the y-coord possible values 
-    if isinstance(area_obj, Line):
+    if is_line:
         area_obj.cell_count = round((area_obj.xmax + int(area_obj.cp.xdot) - area_obj.xmin)/int(area_obj.cp.csize)) + 1
         yuniq = np.unique(np.round(ycoords[(ycoords > 1)]))
         # used by cell_to_braille_indexes_no_magic method
@@ -409,7 +412,7 @@ def get_area_parameters(coords, area_obj: Area):
             area_obj.ydot25 = yuniq[1]
         if yuniq.size > 2:
             area_obj.ydot36 = yuniq[2]
-        logger.debug(f"{area_obj}")
+        logger.debug(f"{log_pfx} params: {area_obj}")
     
     xref_coords = []
     if isinstance(area_obj, Page):
@@ -861,6 +864,8 @@ def translate_line(line_coor, ln, page):
                         
                     if not is_csize_fixed :
                         last_full_cell = cll
+                    else:
+                        pass
         # add "space" between words
         cells.append(np.array([]))
     is_csize_fixed = False
@@ -879,8 +884,8 @@ def translate_line(line_coor, ln, page):
     error_count += lou_err
     # Restore line indentation if any
     if is_diff_ge(page.xmin, cells[0][0][0], page.cp.csize):
-        for i in range(round((cells[0][0][0] - page.xmin)/page.cp.csize)):
-            text = ' ' + text
+        sps = round((cells[0][0][0] - page.xmin)/page.cp.csize)
+        text = ' ' * sps + text
     return text, braille_uni_str, error_count
 
 def get_replacement_for_unknown_indexes():
@@ -947,7 +952,7 @@ def call_louis(word_tuples, line_num, lang=LANG_DFLT):
     eis = lou_transl[0].find('/')
     if eib != -1 and eis != -1:
         if lou_transl[0][eib+1: eis].isdigit():
-            err_count += 1
+            err_count += len(lou_transl[0].split('\\'))
             
         
     return lou_transl[0], braille_uni_str, err_count

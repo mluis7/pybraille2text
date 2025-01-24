@@ -1,6 +1,6 @@
 1. If gasoline costs 42 cents a gallon,
-what will 1,425 gallons cost?
+  what will 1,425 gallons cost?
 2. At 60 cents a dozen, how much should 7 egss
-cost?
-       Think: "What is 60÷70?" Is the
-answer 5? Then what is 7×5?
+  cost?
+    Think: "What is 60÷70?" Is the
+  answer 5? Then what is 7×5?

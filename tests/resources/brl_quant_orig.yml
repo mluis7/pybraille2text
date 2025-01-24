@@ -9,7 +9,7 @@ parse:
     #lang: en
     lang: en-us
     round_to: 1
-    xmin: 50
+    #xmin: 50
     #dot_min_sep: 9
     normalized: true
 cv2_cfg:
