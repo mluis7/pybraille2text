@@ -26,9 +26,19 @@ lou_languages = {
     }
 
 # https://brailleauthority.org/size-and-spacing-braille-characters
+# https://www.loc.gov/nls/wp-content/uploads/2019/09/Spec800.11October2014.final_.pdf
+# x_dot_to_dot  :  0.092 +0.002/-0.001 inches
+# x_cell_to_cell:  0.245 +0.005/-0.001 inches
+cell_spec_brit = {
+    "x_dot_to_dot": [0.091, 0.094],
+    "x_cell_to_cell": [0.244, 0.250] # 2.68 - 2.66 | xsep 1.68 - 1.66
+}
+
 cell_specs = {
     "x_dot_to_dot": [2.3, 2.5],
+    #"x_dot_to_dot": [b * 25.4 for b in cell_spec_brit['x_dot_to_dot']],
     "x_cell_to_cell": [6.1, 7.6],
+    #"x_cell_to_cell": [b * 25.4 for b in cell_spec_brit['x_cell_to_cell']],
     "y_line_to_line": [10.0, 10.2]
 }
 

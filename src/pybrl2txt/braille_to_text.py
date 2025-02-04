@@ -20,7 +20,6 @@ Created on Dec 31, 2024
 '''
 
 import sys
-from future.builtins.misc import isinstance
 import logging
 import yaml
 import cv2
@@ -105,6 +104,8 @@ def get_keypoints(img_path, cv2_params):
 """
 
     image = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+    (h, w) = image.shape[:2]
+    logger.debug(f"Image h/w: {h}x{w} ({w/h:.2f})")
     #ret,image = cv2.threshold(image,64,255,cv2.THRESH_BINARY)
     params = get_build_detector_params(cv2_params)
     # Create a detector with the parameters
@@ -227,14 +228,13 @@ def get_cell_dim_from_specs(xcell, dimension):
     @see: pybrl2txt.braille_maps.cell_specs, pybrl2txt.braille_maps.dots_rels
     Parameters
     ----------
-    :param xcell: cell to get dimensions for
-    :param xuniq_diff: x cell distances for current line
+    :param xcell: xdot of cell to get dimensions for
     :dimension: possible values are: dot_size, cell_size, sep_size
     """
     
     if dimension == 'cell_sep':
-        left_val = dots_rels[f'{dimension}_min'] * 0.8
-        right_val = dots_rels[f'{dimension}_max'] * 1.2
+        left_val = dots_rels[f'{dimension}_min'] * 0.85
+        right_val = dots_rels[f'{dimension}_max'] * 1.08
     elif dimension == 'dot_size':
 #        left_val = xuniq_diff.min()
 #        right_val = xuniq_diff.min() * 1.1
@@ -244,6 +244,7 @@ def get_cell_dim_from_specs(xcell, dimension):
         left_val = dots_rels[f'{dimension}_min'] * 0.92
         right_val = dots_rels[f'{dimension}_max'] * 1.08
     #return xuniq_diff[(xuniq_diff >= xcell * left_val) & (xuniq_diff < xcell * right_val)]
+    logger.trace(f"{dimension}, xcell: {xcell}, left_val: {left_val:.2f}, right_val: {right_val:.2f}")
     return xcell * left_val, xcell * right_val
 
 def is_diff_eq(x1, x2, ref):
@@ -379,19 +380,24 @@ def get_normalized_distances(xydiff, xcoords):
     xcsizenorm = xydiff[xydiff[:, 0] > 0][(xcnorm > left_val) & (xcnorm < right_val)][:, 0]
     logger.debug(f"dots rel {xdotnorm.max()/xdotnorm.min():.2f}, sep rel: {xsepnorm.max()/xsepnorm.min():.2f}, csize rel: {xcsizenorm.max()/xcsizenorm.min():.2f}")
     logger.debug(f"dots max/min {xdotnorm.max():.2f}/{xdotnorm.min():.2f}, sep rel: {xsepnorm.max():.2f}/{xsepnorm.min():.2f}, csize rel: {xcsizenorm.max():.2f}/{xcsizenorm.min():.2f}")
+    logger.debug(f"xsep/xdot: {xsepnorm.max()/xdotnorm.max():.2f}/{xsepnorm.min()/xdotnorm.min():.2f}, csize/xdot: {xcsizenorm.max()/xdotnorm.max():.2f}/{xcsizenorm.min()/xdotnorm.min():.2f}")
     return np.array([xdotnorm.min(), xdotnorm.max()]), np.array([xsepnorm.min(),xsepnorm.max()]), np.array([xcsizenorm.min(), xcsizenorm.max()])
 
 
-def build_reference_cells(xcoords, xydiff, area_obj):
+def build_reference_cells(xcoords, xydiff, page):
     # Build a list of reference cells with all the x coordinates in the page.
-# Improves cell detection a lot since it simplifies the calculation of cell start-end.
+    # Improves cell detection a lot since it simplifies the calculation of cell start-end.
     xref_coords = []
     xcoor_sort = np.unique(sorted(xcoords.copy()))
     xcs_diff = np.diff(xcoor_sort)
     xdotnorm, xsepnorm, xcsizenorm = get_normalized_distances(xydiff, xcoords) 
     
+    page.ref_dims['xdot'] = xdotnorm
+    page.ref_dims['xsep'] = xsepnorm
+    page.ref_dims['csize'] = xcsizenorm
+    
     # index of diff representing cell separation or greater
-    #xcs_diff = xcoor_sort[:-1][xcs_diff > area_obj.cp.xdot * 1.2]
+    #xcs_diff = xcoor_sort[:-1][xcs_diff > page.cp.xdot * 1.2]
     xcs_diff = xcoor_sort[:-1][xcs_diff > xdotnorm.max()]
     pxci = None
     for xci in xcs_diff:
@@ -399,18 +405,18 @@ def build_reference_cells(xcoords, xydiff, area_obj):
             celli = xcoor_sort[xcoor_sort <= xci]
         else:
             celli = xcoor_sort[(xcoor_sort > pxci) & (xcoor_sort <= xci)]
-        p0, p1 = get_ref_cell_tuple(celli, xref_coords, area_obj)
+        p0, p1 = get_ref_cell_tuple(celli, xref_coords, page)
         pxci = xci
         xref_coords.append([p0, p1])
     
     # Add remaining cells if any
     celli = xcoor_sort[xcoor_sort > pxci]
     if len(celli) > 0:
-        p0, p1 = get_ref_cell_tuple(celli, xref_coords, area_obj)
+        p0, p1 = get_ref_cell_tuple(celli, xref_coords, page)
         xref_coords.append([p0, p1])
     return xref_coords
 
-def get_area_parameters(coords, area_obj: Area):
+def get_area_parameters(coords, area_obj: Area, is_line=True):
     """
     Page or Line area parameters to help find cells from detected coordinates.
     
@@ -427,8 +433,7 @@ def get_area_parameters(coords, area_obj: Area):
     :param coords: page or line dots coordinates
     :param area_obj: Page or Line objects
     """
-    is_page = isinstance(area_obj, Page)
-    is_line = isinstance(area_obj, Line)
+    is_page = not is_line
     log_pfx = f"Ln: {area_obj.line_num:>2}" if is_line else "Page:"
     # x,y differences between contiguous dots. Negative values mean second/third rows in a cell and the start of a line.
     # e.g.: previous point p0=(520,69), current point =(69, 140). xydiff = (-451, 71).
@@ -487,7 +492,7 @@ def get_area_parameters(coords, area_obj: Area):
     if len(csizes) == 0:
         # Fallback value but the other is preferred 
         area_obj.cp.csize = xcell + xsep
-        logger.debug(f"{log_pfx} Using fallback cell size: {area_obj.cp.csize}")
+        logger.debug(f"{log_pfx} Using fallback cell size: {area_obj.cp.csize}. Search bounds: left_val: {left_val:.2f}, right_val: {right_val:.2f}")
     else:
         logger.trace(f"{log_pfx} Found cell size: {csizes}")
         area_obj.cp.csize = np.average(csizes)
@@ -502,13 +507,17 @@ def get_area_parameters(coords, area_obj: Area):
             area_obj.ydot25 = yuniq[1]
         if yuniq.size > 2:
             area_obj.ydot36 = yuniq[2]
-        logger.debug(f"{log_pfx} params: {area_obj}")
+        logger.debug(f"{area_obj}")
     
     if is_page:
         xref_coords = build_reference_cells(xcoords, xydiff, area_obj)
         xref_coords = np.array(xref_coords)
         area_obj.ref_cells = xref_coords
         logger.info(f"Page: reference cells found: {len(xref_coords)}")
+        logger.debug(f"{log_pfx} Initially found cell sizes: {csizes}")
+        logger.debug(f"{log_pfx} Reference  xdot values: {area_obj.ref_dims['xdot']}")
+        logger.debug(f"{log_pfx} Reference  xsep values: {area_obj.ref_dims['xsep']}")
+        logger.debug(f"{log_pfx} Reference csize values: {area_obj.ref_dims['csize']}")
     return area_obj, xydiff
 
 def get_line_area_parmeters(line_coor, ln, page, areas):
@@ -765,7 +774,7 @@ def cell_keypoints_to_braille_indexes(cell, page, ln, idx):
         ref = page.ref_cells[rindex]
         cell_start = ref[:,0].max()
     else:
-        rindex = ((page.ref_cells[:,:,0] >= cell[:,0].min()) & (page.ref_cells[:,:,0] <= cell[:,0].max() + 1)).any(axis=1)
+        rindex = ((page.ref_cells[:,:,0] >= cell[:,0].min() - 1) & (page.ref_cells[:,:,0] <= cell[:,0].max() + 1)).any(axis=1)
         ref = page.ref_cells[rindex]
         if len(ref) > 0:
             cell_start = ref[:,0].max()
@@ -920,9 +929,11 @@ def translate_line(line_coor, ln, page):
             ccoor = line_coor[(line_coor[:,0] > pwi[0]) & (line_coor[:,0] <= wi[0])]
         wrd_cells.append(ccoor)
         pwi = wi
+        line_params.word_count += 1
     if pwi is not None:
         # append remaining coordinates if any
         wrd_cells.append(line_coor[line_coor[:,0] > pwi[0]])
+        line_params.word_count += 1
     
     is_csize_fixed = False
     last_full_cell = None
@@ -942,6 +953,7 @@ def translate_line(line_coor, ln, page):
             
             if len(cll) > 0:
                 cells.append(cell_sanity_check(cll, wrdc, cp, cs, ln, i, cn))
+                line_params.cell_count += 1
                 cn += 1
                 if cp.xdot < 9 and len(np.unique(cll[:, 0])) == 2:
                     # Fix cell size for small xdot distance (probably low res image) - once per line
@@ -955,7 +967,8 @@ def translate_line(line_coor, ln, page):
             else:
                 logger.trace(f"Ln {ln}, word {i}.ref range returned no cells. Ref:" + rc.__repr__().replace('\n', ' '))
         # add "space" between words
-        cells.append(np.array([]))
+        if i < len(wrd_cells) - 1:
+            cells.append(np.array([]))
     is_csize_fixed = False
         
     # translate cell coordinates to Braille indexes
@@ -967,10 +980,13 @@ def translate_line(line_coor, ln, page):
             brl_idx, is_cell_error = cell_to_braille_indexes_no_magic(cell, page, ln, idx)
         idxs.append(brl_idx)
         error_count +=  1 if is_cell_error else 0
-        
-    text, braille_uni_str, lou_err = call_louis(idxs, ln, page.lang)
+    #FIXME: move louis out of this method    
+    braille_uni_str, lou_err = translate_indexes_to_unicode(idxs, ln)
+    error_count += lou_err
+    lou_transl, lou_err = call_louis(braille_uni_str, page.lang)
     error_count += lou_err
     # Restore line indentation if any
+    text = lou_transl[0]
     if is_diff_ge(page.xmin, cells[0][0][0], page.cp.csize):
         sps = round((cells[0][0][0] - page.xmin)/page.cp.csize)
         text = ' ' * sps + text
@@ -994,7 +1010,22 @@ def call_louis_to_Braille_ascii(braille_uni_str, lang='en-ascii'):
     # to Braille ASCII
     return louis.backTranslate(lou_languages[lang], braille_uni_str, typeform=louis.emph_1)[0]
 
-def call_louis(word_tuples, line_num, lang=LANG_DFLT):
+
+def call_louis(braille_uni_str, lang=LANG_DFLT):
+    err_count = 0
+    # louis.dotsIO|louis.ucBrl
+    # setting mode=louis.noUndefined will remove \<numbers>/ errors from translation
+    # but the error count would be lost
+    lou_transl = louis.backTranslate(lou_languages[lang], braille_uni_str) 
+    # translated string contains an untranslated sequence like \456/
+    eib = lou_transl[0].find('\\')
+    eis = lou_transl[0].find('/')
+    if eib != -1 and eis != -1:
+        if lou_transl[0][eib + 1:eis].isdigit():
+            err_count += len(lou_transl[0].split('\\'))
+    return lou_transl, err_count
+
+def translate_indexes_to_unicode(word_tuples, line_num):
     """
     Convert index tuples to unicode characters for the whole line,
     then supply that braille unicode text to python-louis to get translated text.
@@ -1029,19 +1060,8 @@ def call_louis(word_tuples, line_num, lang=LANG_DFLT):
             braille_uni_str += get_replacement_for_unknown_indexes()
             err_count += 1
     logger.trace(f"Line {line_num}: Braille unicode text: {braille_uni_str}")
-    # louis.dotsIO|louis.ucBrl
-    # setting mode=louis.noUndefined will remove \<numbers>/ errors from translation
-    # but the error count would be lost
-    lou_transl = louis.backTranslate(lou_languages[lang], braille_uni_str)
-    
-    # translated string contains an untranslated sequence like \456/
-    eib = lou_transl[0].find('\\')
-    eis = lou_transl[0].find('/')
-    if eib != -1 and eis != -1:
-        if lou_transl[0][eib+1: eis].isdigit():
-            err_count += len(lou_transl[0].split('\\'))
             
-    return lou_transl[0], braille_uni_str, err_count
+    return braille_uni_str, err_count
 
 def  parse_keypoints(config, keypoints):
     """
@@ -1074,7 +1094,6 @@ def  parse_keypoints(config, keypoints):
     
     round_to = config['parse']['round_to']
     lang = config['parse'].get('lang',LANG_DFLT)
-    xmin = config['parse'].get('xmin')
     normalized = config['parse'].get('normalized', True)
     dot_min_sep = config['parse'].get('dot_min_sep')
     
@@ -1098,11 +1117,9 @@ def  parse_keypoints(config, keypoints):
         
         page= Page()
         page.cp.blob_sizes = areas
-        page, xydiff = get_area_parameters(blob_coords, page)
+        page, xydiff = get_area_parameters(blob_coords, page, False)
         cp = page.cp
-        # FIXME: force xmin from configuration file
-#        if xmin is not None:
-#            page.xmin = xmin
+
         if not normalized:
             cp.normalized = normalized
         if dot_min_sep is not None:
@@ -1112,8 +1129,6 @@ def  parse_keypoints(config, keypoints):
         page.lang = lang
         logger.info(f"Detected blobs: {len(blob_coords)}, max cells per line: {(page.xmax - page.xmin)/cp.csize:.0f}")
         logger.info(f"Page X params: xdot|xsep|csize: {cp.xdot :.2f}|{cp.xsep:.2f}|{cp.csize:.2f}, xmin|xmax: {page.xmin:.0f}|{page.xmax:.0f}")
-        #logger.info(f"Page Y params: ycell {cp.ydot:.2f}, ymin {page.ymin:.0f}")
-        
         
         # List of list of cells by line
         detected_lines, lines_coord = group_by_lines(kp_map, blob_coords, xydiff, page)
@@ -1124,7 +1139,8 @@ def  parse_keypoints(config, keypoints):
             text_lines.append(lntext)
             braille_lines.append(lntxt_braille)
             total_errors += err_cnt
-    
+        for ln, line_params in page.lines_params.items():
+            logger.debug(f"Ln: {ln:>3}. Cells : {line_params.cell_count}, Words: {line_params.word_count:>3}")
     except Exception as e:
         logger.error(f"Critical error while parsing lines: {e}", exc_info=logger.isEnabledFor(logging.DEBUG))
         return [], 1, [], None, None
@@ -1189,7 +1205,8 @@ def main(args):
     logger.info(f"Total_errors: {total_errors}")
 
     print(f'\n{"-" * 80}')
-    print('\n'.join(text))
+    for ln, t in enumerate(text):
+        print(f"Ln {ln:>2}| '{t}'")
     
 #    print(f'\n{"-" * 80}')
 #    for brl_ln in braille_lines:

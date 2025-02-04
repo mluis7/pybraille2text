@@ -49,7 +49,7 @@ class CellParams(object):
     dot_size_spec = 0
     
     def __repr__(self):
-        return f"CellParams: xdot: {self.xdot}, ydot: {self.ydot}, xsep: {self.xsep}, csize: {self.csize:.3f}, blob_sizes: {self.blob_sizes}"
+        return f"CellParams: xdot: {self.xdot}, ydot: {self.ydot}, xsep: {self.xsep}, csize: {self.csize:.3f}, csize/xdot: {self.csize/self.xdot:3f}"
     def __str__(self):
         return self.__repr__()
     
@@ -61,6 +61,10 @@ class Page(Area):
     cp  = CellParams()
     lines_params = {}
     ref_cells = []
+    ref_dims = {
+        'xdot': [],
+        'xsep': [],
+        'csize': []}
     lang = 'en'
 
 @dataclass
@@ -74,11 +78,12 @@ class Line(Area):
     # Useful for debugging
     line_num = -1
     cell_count = 0
+    word_count = 0
     # CellParams
     cp  = CellParams()
     
     def __repr__(self):
-        return f"Ln: {self.line_num:>2}, p0: ({self.xmin}, {self.ymin:4.1f}), p_nth: ({self.xmax:6.1f}, {self.ymax:6.1f}), csize: {self.cp.csize:.2f}, cell_count: {self.cell_count}, blob_sizes: {self.cp.blob_sizes}"
+        return f"Ln: {self.line_num:>2}, p0: ({self.xmin}, {self.ymin:4.1f}), p_nth: ({self.xmax:5.1f}, {self.ymax:4.1f}), csize: {self.cp.csize:.2f}, xsep/xdot: {self.cp.xsep/self.cp.xdot:.2f}, csize/xdot: {self.cp.csize/self.cp.xdot:.2f}, blob_sizes: {self.cp.blob_sizes}"
     def __str__(self):
         return self.__repr__()
 
