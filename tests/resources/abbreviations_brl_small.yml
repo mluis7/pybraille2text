@@ -7,10 +7,7 @@ cfg:
 parse:
     #lang: engbg2
     round_to: 0
-    offset: 1.15
     normalized: true
-    # sensitive value
-    #xmin: 54
 cv2_cfg:
     detect:
         min_area: 8
@@ -20,6 +17,7 @@ cv2_cfg:
         min_convexity: 0.75
     show_detect:
         enabled: false
+        with_dots: true
         with_cell_end: true
         with_keypoints: true
         

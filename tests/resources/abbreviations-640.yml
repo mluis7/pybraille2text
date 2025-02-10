@@ -4,11 +4,11 @@ grade: 2
 
 cfg:
     logging_level: debug
+    with_louis: text
 parse:
     #lang: es
     round_to: 1
     offset: 1.15
-    #xmin: 54
     #normalized: false
 cv2_cfg:
     detect:

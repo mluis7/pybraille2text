@@ -10,8 +10,6 @@ parse:
     #lang: fr-bfu-g2
     round_to: 0
     offset: 1.15
-    #xmin: 77
-    #dot_min_sep: 9
     normalized: true
 cv2_cfg:
     detect:

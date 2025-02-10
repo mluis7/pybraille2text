@@ -8,8 +8,6 @@ parse:
     #lang: engbg2
     round_to: 0
     offset: 1.15
-    # sensitive value FIXME
-    xmin: 54
     normalized: true
 cv2_cfg:
     detect:

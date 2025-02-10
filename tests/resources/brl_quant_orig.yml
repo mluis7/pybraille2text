@@ -4,13 +4,11 @@ grade: 2
 
 cfg:
     logging_level: debug
+    with_louis: text # text ascii braille all none
 
 parse:
-    #lang: en
-    lang: en-us
+    lang: en-us # keys in pybrl2txt.braille_maps
     round_to: 1
-    #xmin: 50
-    #dot_min_sep: 9
     normalized: true
 cv2_cfg:
     detect:
@@ -26,6 +24,7 @@ cv2_cfg:
     show_detect:
         enabled: false
         basic: false
-        with_cell_end: false
+        with_dots: true
+        with_cell_end: true
         with_keypoints: true
         
