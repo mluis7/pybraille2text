@@ -1,0 +1,30 @@
+
+name: abbraviations
+grade: 2
+
+cfg:
+    logging_level: debug
+    with_louis: text # text ascii braille all none
+
+parse:
+    lang: en-us # keys in pybrl2txt.braille_maps
+    round_to: 1
+    normalized: true
+cv2_cfg:
+    detect:
+        min_area: 5
+        max_area: 100
+        min_inertia_ratio: 0.5
+        min_circularity: 0.5
+        min_convexity: 0.5
+        min_dist_between_blobs: 5
+        min_threshold: 20
+        max_threshold: 50
+        
+    show_detect:
+        enabled: false
+        basic: false
+        with_dots: true
+        with_cell_end: true
+        with_keypoints: true
+        

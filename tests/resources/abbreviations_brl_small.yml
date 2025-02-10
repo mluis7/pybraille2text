@@ -1,5 +1,5 @@
 
-name: abbreviations_brl_single_line
+name: abbreviations_brl_small
 grade: 2
 
 cfg:
@@ -7,19 +7,17 @@ cfg:
 parse:
     #lang: engbg2
     round_to: 0
-    offset: 1.15
-    # sensitive value
-    xmin: 54
     normalized: true
 cv2_cfg:
     detect:
-        min_area: 50
-        max_area: 90
+        min_area: 8
+        max_area: 100
         min_inertia_ratio: 0.75
-        min_circularity: 0.75
+        min_circularity: 0.85
         min_convexity: 0.75
     show_detect:
         enabled: false
+        with_dots: true
         with_cell_end: true
         with_keypoints: true
         

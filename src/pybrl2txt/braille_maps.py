@@ -1,7 +1,8 @@
 
-__all__ = ['BLANK', 'cell_map', 'numbers', 'prefixes', 'abbr', 'symbols', 'BLANK', 'ACUTE' \
-           'NUMBER', 'UPPER', 'ilc_pfx', 'abbr1', 'abbr2', 'abbr3', 'lou_languages']
+__all__ = ['BLANK', 'lou_languages', 'MAX_LINE_CELLS', 'cell_specs', 'dots_rels']
 BLANK = (0,)
+MAX_LINE_CELLS = 40
+LANG_DFLT = 'en-ueb-g2'
 
 ACUTE = 'ACUTE' #  ((4, 5), (3, 4))((1,),) -> á
 UPPER = 'UPPER'
@@ -14,10 +15,51 @@ ILC456 = 'ILC456'
 ILC56 = 'ILC56'
 
 lou_languages = {
-    'es': ["unicode.dis",'es-g2.ctb'], 
-    'en': ["unicode.dis", 'en-ueb-g2.ctb'], 
+    'es': ["es-new.dis", "unicode.dis",'es-g2.ctb'], 
+    LANG_DFLT: ['unicode.dis', 'en-ueb-g2.ctb'], # 'nemethdefs.cti', 'en-ueb-math.ctb', 
+    'en-us': ['en-chardefs.cti', "unicode.dis", 'en-ueb-math.ctb', 'en-us-g2.ctb'],
+    'en-us-gb1': ["unicode.dis", 'en-us-g1.ctb'], #'en-chardefs.cti', 
     'en-gb-g2': ["unicode.dis",'en-GB-g2.ctb'], 
-    'fr': ['fr-bfu-g2.ctb']
+    'en-gb-g1': ["unicode.dis",'en-gb-g1.ctb'], 
+    'en-ascii': ['en-chardefs.cti', 'unicode.dis'],
+    'fr-bfu-g2': ['unicode.dis','fr-bfu-g2.ctb']
+    }
+
+# https://brailleauthority.org/size-and-spacing-braille-characters
+# https://www.loc.gov/nls/wp-content/uploads/2019/09/Spec800.11October2014.final_.pdf
+# x_dot_to_dot  :  0.092 +0.002/-0.001 inches
+# x_cell_to_cell:  0.245 +0.005/-0.001 inches
+cell_spec_brit = {
+    "x_dot_to_dot": [0.091, 0.094],
+    "x_cell_to_cell": [0.244, 0.250] # 2.68 - 2.66 | xsep 1.68 - 1.66
+}
+
+cell_specs = {
+    "x_dot_to_dot": [2.3, 2.5],
+    #"x_dot_to_dot": [b * 25.4 for b in cell_spec_brit['x_dot_to_dot']],
+    "x_cell_to_cell": [6.1, 7.6],
+    #"x_cell_to_cell": [b * 25.4 for b in cell_spec_brit['x_cell_to_cell']],
+    "y_line_to_line": [10.0, 10.2]
+}
+
+# Cell dimensions normalized to dot separation  
+dots_rels = {
+    # x_cell_to_cell[0]/x_dot_to_dot[0] 
+    # min = 2.65
+    "cell_size_min": cell_specs["x_cell_to_cell"][0]/cell_specs["x_dot_to_dot"][0],
+    # x_cell_to_cell[1]/x_dot_to_dot[1]
+    # max = 3.04
+    "cell_size_max": cell_specs["x_cell_to_cell"][1]/cell_specs["x_dot_to_dot"][1],
+    # cell separation - distance between dots 4-1, 5-2, 3-6.
+    #   4    1
+    # . * -> * .
+    # . * -> * .
+    # . * -> * .
+    #
+    # min= 1.65
+    "cell_sep_min": (cell_specs["x_cell_to_cell"][0] - cell_specs["x_dot_to_dot"][0])/cell_specs["x_dot_to_dot"][0],
+    # max=2.04
+    "cell_sep_max": (cell_specs["x_cell_to_cell"][1] - cell_specs["x_dot_to_dot"][1])/cell_specs["x_dot_to_dot"][1]
     }
 
 cell_map = {
@@ -38,20 +80,6 @@ numbers = {
     (1,): '1', (1,2): '2', (1,4): '3', (1,4,5): '4', (1,5): '5',
     (1,2,4): '6', (1,2,4,5): '7', (1,2,5): '8', (2,4): '9', (2,4,5): '0',
     }
-
-prefixes = { UPPER: (6,), # Upper case prefix 
-            #(2,5,6),
-            NUMBER: (3,4,5,6), # numeral prefix
-            ACUTE: ((4, 5), (3, 4)),
-            #(4,5), # initial letter contraction
-            ILC45: (4, 5),
-            #(4,5,6), # initial letter contraction
-            ILC456: (4, 5, 6),
-            # (5,6), # initial letter contraction
-            ILC56: (5, 6),
-            } 
-
-ilc_pfx = [prefixes[ILC45], prefixes[ILC456], prefixes[ILC56]]
 
 # extracted from https://www.brailleauthority.org/ueb/symbols_list.pdf
 rev_abbr = {'about': ((1,), (1, 2)), 'above': ((1,), (1, 2), (1, 2, 3, 6)), 'according': ((1,), (1, 4)),
@@ -116,44 +144,27 @@ rev_abbr = {'about': ((1,), (1, 2)), 'above': ((1,), (1, 2), (1, 2, 3, 6)), 'acc
         'some': ((5,), (2, 3, 4),), 'spirit': ((4, 5, 6), (2, 3, 4),),
         # st/still 
         'st': ((3, 4),), 'still': ((3, 4),), 
-        'such': ((2, 3, 4), (1, 6)), 'th': ((1, 4, 5, 6),), 
+        'such': ((2, 3, 4), (1, 6)),
         
-        'the': ((2,3,4,6),), 'their': ((4, 5, 6), (3, 4, 6),), 'themselves': ((2, 3, 4, 6), (1, 3, 4), (1, 2, 3, 6), (2, 3, 4)), 're': ((2, 3, 5),), 
-        'these': ((4, 5), (2, 3, 4, 6),), 'this': ((2, 4, 5, 6),), 'those': ((4, 5), (1, 4, 5, 6)), 'through': ((5,), (1, 4, 5, 6)), 
+        'th': ((1, 4, 5, 6),), "that": ((2, 3, 4, 5)), 
+        'the': ((2,3,4,6),), 'their': ((4, 5, 6), (2, 3, 4, 6),), 'themselves': ((2, 3, 4, 6), (1, 3, 4), (1, 2, 3, 6), (2, 3, 4)), 
+        'there': ((5,), (2, 3, 4, 6),), 
+        'these': ((4, 5), (2, 3, 4, 6),), 'this': ((1, 4, 5, 6),), 'those': ((4, 5), (1, 4, 5, 6)), 'through': ((5,), (1, 4, 5, 6)), 
         'thyself': ((1, 4, 5, 6), (1, 3, 4, 5, 6), (1, 2, 4)), 'time': ((5,), (2, 3, 4, 5),), 
         'tion': ((5,6), (1, 3, 4, 5)), 'today': ((2, 3, 4, 5), (1, 4, 5)), 'together': ((2, 3, 4, 5), (1, 2, 4, 5), (1, 2, 3, 5)),
         'tomorrow': ((2, 3, 4, 5), (1, 3, 4)), 'tonight': ((2, 3, 4, 5), (1, 3, 4, 5)), 'under': ((5,), (1, 3, 6),), 
         'upon': ((4,5), (1, 3, 6),), 'us': ((1, 3, 6),), 'very': ((1, 2, 3, 6),), 'was': ((3, 5, 6),), 
-        'were': ((2, 3, 5, 6),), 'where': ((2, 3, 5, 6),),
+        'were': ((2, 3, 5, 6),), 'where': ((5,), (1, 5, 6),),
         # wh/which
-        'wh': ((1, 5, 6),), 'which': ((1, 5, 6),), 
-        'will': ((2, 4, 5, 6),), 'with': ((2, 3, 4, 5, 6),), 'word': ((4, 5, 6),(2, 4, 5, 6)), 'work': ((5,),(2, 4, 5, 6)), 
-        'world': ((3, 4, 5),(2, 4, 5, 6),), 'would': ((2, 4, 5, 6), (1, 4, 5)), 'you': ((1, 3, 4, 5, 6),), 
+        'wh': ((1, 5, 6),), 'which': ((1, 5, 6),), "whose": ((4, 5), (1, 5, 6)),
+        'will': ((2, 4, 5, 6),), 'with': ((2, 3, 4, 5, 6),), 'word': ((4, 5),(2, 4, 5, 6)), 'work': ((5,),(2, 4, 5, 6)), 
+        'world': ((4, 5, 6),(2, 4, 5, 6),), 'would': ((2, 4, 5, 6), (1, 4, 5)), 'you': ((1, 3, 4, 5, 6),), 
         'young': ((5,), (1, 3, 4, 5, 6)), 'your': ((1, 3, 4, 5, 6), (1, 2, 3, 5)), 'yourself': ((1, 3, 4, 5, 6), (1, 2, 3, 5), (1, 2, 4)), 
         'yourselves': ((1, 3, 4, 5, 6), (1, 2, 3, 5), (1, 2, 3, 6), (2, 3, 4))
 }
 
-rev_symbols = {
-    ':': ((2, 5),),
-    '&': ((4,), (1, 2, 3, 4, 6)), '<': ((4,), (1, 2, 6)), '>': ((4,), (3, 4, 5)), '_c': (), 
-    "'": ((3,)), '"*': ((5,), (3, 5)), '_m': (), '"': (), '#': (),
-    '@': ((4,), (1,)), '\\': ((4, 5, 6), (1, 6)), '{': ((4, 5, 6), (1, 2, 6)), '}': ((4, 5, 6), (3, 4, 5)),
-    '(': ((5,), (1, 2, 6)), ')': ((5,), (3, 4, 5)), '[': ((4, 6), (1, 2, 6)), ']': ((4, 6),(3, 4, 5)),
-     '£': ((4,), (1, 2, 3)), '•': ((4, 5, 6),(2, 5, 6)), '¢': ((4,), (1, 4)), 
-    '©': ((4, 5), (1, 4)), '†': (), '‡': (), '—': (), '——': (), '~': (), '°': (),
-    '〃': (), '÷': (), '$': (), '″': (),
-    '=': (), '€': (), '¡': (), #'′': (),
-     '♀': (),
-    '₣': (),
-    '¿': (), '|': (), '_': (), '♂': (), '−': (), '×': (), '₦': (),
-    '¶': (), '+': (),
-    '®': (), '§': (),
-    '™': (),
-    '¥': ()
-}
 
 abbr = { v:k for k,v in rev_abbr.items()}
-symbols = { v:k for k,v in rev_symbols.items()}
 
 def print_flattened_keys_values():
     sk = {}
@@ -198,4 +209,5 @@ abbr1, abbr2, abbr3 = get_by_sorted_value(rev_abbr)
 #print(abbr3)
 
 #print_flattened_keys_values()
+#print(sorted(rev_abbr.keys()))
 

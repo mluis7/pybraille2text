@@ -1,21 +1,20 @@
 
-name: abbraviations
+name: abbreviations_brl_single_line
 grade: 2
 
 cfg:
     logging_level: debug
-    with_louis: all # text ascii braille all none
 parse:
-    lang: es
+    #lang: engbg2
     round_to: 0
     offset: 1.15
-    #normalized: false
+    normalized: true
 cv2_cfg:
     detect:
-        min_area: 18
-        max_area: 200
-        min_inertia_ratio: 0.85
-        min_circularity: 0.80
+        min_area: 20
+        max_area: 90
+        min_inertia_ratio: 0.75
+        min_circularity: 0.75
         min_convexity: 0.75
     show_detect:
         enabled: false

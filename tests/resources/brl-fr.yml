@@ -4,23 +4,22 @@ grade: 2
 
 cfg:
     logging_level: debug
+    with_louis: text
 
 parse:
-    lang: en-gb-g2
+    lang: fr-bfu-g2
     round_to: 0
-    offset: 1.15
-    #xmin: 77
-    #dot_min_sep: 9
     normalized: true
 cv2_cfg:
     detect:
-        min_area: 10
+        min_area: 12
         max_area: 200
         min_inertia_ratio: 0.85
         min_circularity: 0.80
         min_convexity: 0.75
     show_detect:
-        enabled: true
-        with_cell_end: false
+        enabled: false
+        with_ref_dots: true
+        with_cell_end: true
         with_keypoints: true
         

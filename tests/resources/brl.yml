@@ -1,25 +1,26 @@
 
-name: abbreviations_brl_small
+name: technical_new.png
+notes: perfect coordinates generation
 grade: 2
 
 cfg:
     logging_level: debug
+
 parse:
-    #lang: engbg2
+    #lang: fr-bfu-g2
     round_to: 0
     offset: 1.15
     normalized: true
-    # sensitive value
-    #xmin: 54
 cv2_cfg:
     detect:
         min_area: 10
-        max_area: 100
-        min_inertia_ratio: 0.75
-        min_circularity: 0.85
+        max_area: 200
+        min_inertia_ratio: 0.85
+        min_circularity: 0.80
         min_convexity: 0.75
     show_detect:
         enabled: false
-        with_cell_end: true
+        with_ref_dots: true
+        with_cell_end: false
         with_keypoints: true
         
