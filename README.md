@@ -39,7 +39,8 @@ detection errors that will lead to translation errors. Some times a lot of them 
 ### Reference cells
 The extra line of small colored dots on top of the first line represents the calculated reference cells coordinates to be used on cell detection and detection visualization. The vertical lines between cells is also another visual help to troubleshoot detection. Think of this as flattening the image and keeping a single line of all possible dots. The more lines the image has, the more accurate the reference will be. Two dots are enough to build a complete cell since vertical dot distance is equal to the horizontal dot distance, i.e. having the coordinates of dots 1,4 allows to find coordinates of dots 1,5 and 3,6.  
 The size of the extra colored dots represents how the dot was generated. Smallest dots (1 px) are the original ones detected by `opencv`, other sizes from 3 to 7 are calculated coordinates dots. This line is added only to be displayed and NOT PART of the original coordinates.  
-The last dot in the reference line is a calculated one and helps to translate the dot in the last cell of the first line as dot 1 and not dot 4.
+In the image below, the last dot in the reference line is a calculated one and helps to translate the dot in the last cell of the first line as dot 1 and not dot 4.
+
 ![X difference between points](./src/resources/line_detection_dots_lines.png)
 
 ## Braille considerations
