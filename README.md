@@ -96,6 +96,8 @@ ERROR   [ pybrl2txt ] index translation error
  [954.  66.]] -> (-1, -1, -1)
  ```
 
+Cell coordinates are detected with a high degree of success even with partial images.
+
 ## Translate cell coordinates to Braille character indexes
 Translate cell coordinates to dot indexes tuples like `((4, 5, 6), (3, 4, 6),)`.
 
